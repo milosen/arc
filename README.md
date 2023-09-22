@@ -3,6 +3,14 @@ ARC: A tool for creating artificial languages with rhythmicity control
 
 ![](resources/algorithm.png)
 
+## Setup
+```shell
+pip install -e .
+```
+or 
+```shell
+pip install git+https://github.com/milosen/arc
+```
 ## TODOS
 - syllables-options: 
   - prob threashold log-uniform 0.05 default (same for grams and phons)
