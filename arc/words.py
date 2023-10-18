@@ -2,13 +2,16 @@ import csv
 import os
 import pickle
 import random
+from typing import List
 
 import numpy as np
 from scipy.stats import stats
+from tqdm.rich import tqdm
 
 from arc.phonecodes import phonecodes
 from arc import CORPUS_DEFAULT_PATH, RESULTS_DEFAULT_PATH
-from arc.syllables import SYLLABLES_DEFAULT_PATH, BINARY_FEATURES_DEFAULT_PATH, read_binary_features, SyllablesData, Phonemes
+from arc.syllables import SYLLABLES_DEFAULT_PATH, BINARY_FEATURES_DEFAULT_PATH, read_binary_features, SyllablesData, \
+    Phonemes, print_obj
 
 
 def generate_subset_sylls(iSyll, allIdx, f_Cls):
@@ -45,7 +48,6 @@ def generate_subset_sylls(iSyll, allIdx, f_Cls):
     return set_i
 
 
-# !!! GENERATE TRISYLLABIC WORDS WITH NO OVERLAP OF CLASSES OF FEATURES ACROSS SYLLABLES
 def generate_trisyll_word(syllables, f_cls):
     allIdx = set([syllables.index(i) for i in syllables])
     while True:
@@ -64,6 +66,7 @@ def generate_trisyll_word(syllables, f_cls):
 
 # CHECK IF A TRIPLET HAS NON-ZERO (gram) OR UNIFORM (Gram) BIGRAM AND TRIGRAM LOG-PROBABILITY
 def get_corpus_gram_stats(iTrip, Gram2, Gram3):
+    """TODO: Change implementation for other syllables-settings?"""
     GoodT = True
     seg_1 = iTrip[1:4]
     seg_2 = iTrip[4:7]
@@ -78,17 +81,37 @@ def get_corpus_gram_stats(iTrip, Gram2, Gram3):
     return GoodT
 
 
+def generate_nsyll_words(syllables, f_cls, n_sylls=3, n_tries=1_000_000) -> List:
+    words = set()
+    all_idx_list = range(len(syllables))
+    for _ in tqdm(range(n_tries)):
+        word = ""
+        idx_list = all_idx_list
+        for _ in range(n_sylls):
+            if not idx_list:
+                break
+            idx = random.choice(idx_list)
+            word += syllables[idx]
+            idx_set = generate_subset_sylls(idx, set(idx_list), f_cls)
+            idx_list = list(idx_set)
+        words.add(word)
+    return words
+
+
 def generate_words():
     print("LOAD SYLLABLES")
     with open(os.path.join(RESULTS_DEFAULT_PATH, "syllables.pickle"), 'rb') as f:
-        fdata = pickle.load(f)
+        syllables_data: SyllablesData = pickle.load(f)
 
-    CVsyl = fdata[0]
-    xPhon = fdata[1]
-    gram2 = fdata[2]
-    Gram2 = fdata[3]
-    gram3 = fdata[4]
-    Gram3 = fdata[5]
+    print_obj(syllables_data)
+    exit()
+
+    CVsyl = syllables_data.sylls
+    xPhon = syllables_data.phons_rare
+    gram2 = syllables_data.bigrams
+    Gram2 = syllables_data.bigrams_prob_filtered
+    gram3 = syllables_data.trigrams
+    Gram3 = syllables_data.trigrams_prob_filtered
 
     bin_feat = read_binary_features(BINARY_FEATURES_DEFAULT_PATH)
     numbs = bin_feat.numbs
@@ -119,14 +142,21 @@ def generate_words():
              set(idx_Ä), set(idx_Ö), set(idx_Ü)]
     f_Cls = [f_Mnr, f_Plc, f_Vow]
 
-    # GENERATE LIST OF TRISYLLABIC WORDS WITH NO OVERLAP OF COMPLEX PHONETIC FEATURES ACROSS SYLLABLES
-    words = list(set([generate_trisyll_word(CVsyl, f_Cls) for _ in range(1000000)]))
+    RELOAD_WORDS = False
 
-    # SAVE LIST OF TRIPLETS IN ONE CSV FILE
-    with open(os.path.join(RESULTS_DEFAULT_PATH, 'words.csv'), 'w') as f:
-        w = csv.writer(f)
-        for word in words:
-            w.writerows([[word]])
+    if not os.path.exists(os.path.join(RESULTS_DEFAULT_PATH, 'words.csv')) or RELOAD_WORDS:
+        print("GENERATE LIST OF TRISYLLABIC WORDS WITH NO OVERLAP OF COMPLEX PHONETIC FEATURES ACROSS SYLLABLES")
+        # words = list(set([generate_trisyll_word(CVsyl, f_Cls) for _ in tqdm(range(1000))]))
+        words = generate_nsyll_words(CVsyl, f_Cls)
+        print("Words generated: ", len(words))
+
+        # SAVE LIST OF TRIPLETS IN ONE CSV FILE
+        with open(os.path.join(RESULTS_DEFAULT_PATH, 'words.csv'), 'w') as f:
+            w = csv.writer(f)
+            for word in words:
+                w.writerows([[word, 0]])
+    else:
+        print("LOAD WORDS")
 
     # TO ENSURE THAT THE TRIPLETS CANNOT BE MISTAKEN FOR GERMAN WORDS,
     # WE INSTRUCTED A NATIVE GERMAN SPEAKER TO MARK EACH TRIPLET AS...
@@ -140,17 +170,21 @@ def generate_words():
     #         [do not flag if rule exceptions exist])
     #     '0' OTHERWISE (that is, the item is good)
 
-    # LOAD LIST OF TRIPLETS AND SELECT THOSE THAT CANNOT BE MISTAKEN FOR GERMAN WORDS
+    print("LOAD LIST OF TRIPLETS AND SELECT THOSE THAT CANNOT BE MISTAKEN FOR GERMAN WORDS")
     fdata = list(csv.reader(open(os.path.join(RESULTS_DEFAULT_PATH, 'words.csv'), "r"), delimiter='\t'))
+
     trips = [i[0] for i in [i[0].split(",") for i in fdata] if int(i[1]) == 0]
 
-    # EXCLUDE WORDS WITH LOW ONSET SYLLABLE PROBABILITY
+    print("EXCLUDE WORDS WITH LOW ONSET SYLLABLE PROBABILITY")
     trips = [i for i in trips if i[0] not in xPhon]
 
-    # SELECT WORDS WITH UNIFORM BIGRAM AND NON-ZERO TRIGRAM LOG-PROBABILITY OF OCCURRENCE IN THE CORPUS
-    words = [i for i in trips if get_corpus_gram_stats(i, Gram2, Gram3)]
+    print("SELECT WORDS WITH UNIFORM BIGRAM AND NON-ZERO TRIGRAM LOG-PROBABILITY OF OCCURRENCE IN THE CORPUS")
+    print(trips)
+    exit()
+    words = [i for i in tqdm(trips) if get_corpus_gram_stats(i, Gram2, Gram3)]
+    print(len(words), len(trips))
 
-    # SAVE WORDS
+    print("SAVE WORDS")
     fname = os.path.join(RESULTS_DEFAULT_PATH, 'words.pickle')
     fdata = [words, trips]
     with open(fname, 'wb') as f:
