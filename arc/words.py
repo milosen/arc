@@ -2,6 +2,7 @@ import csv
 import os
 import pickle
 import random
+from collections import deque
 from typing import List
 
 import numpy as np
@@ -81,19 +82,39 @@ def get_corpus_gram_stats(iTrip, Gram2, Gram3):
     return GoodT
 
 
-def generate_nsyll_words(syllables, f_cls, n_sylls=3, n_tries=1_000_000) -> List:
+def generate_nsyll_words(syllables, f_cls, n_sylls=3, n_look_back=2, n_tries=1_000_000) -> List:
     words = set()
-    all_idx_list = range(len(syllables))
+    all_idx = set(range(len(syllables)))
+    # idx_sets = deque([all_idx]*n_look_back)
+    for _ in tqdm(range(n_tries)):
+        while True:
+            syl_1 = syllables.index(random.sample(syllables, 1)[0])
+            set_1 = generate_subset_sylls(syl_1, all_idx, f_cls)
+            if set_1:
+                syl_2 = random.sample(list(set_1), 1)[0]
+                set_2 = generate_subset_sylls(syl_2, all_idx, f_cls)
+                if set_2:
+                    set_3 = set_1.intersection(set_1, set_2)
+                    if set_3:
+                        syl_3 = random.sample(list(set_3), 1)[0]
+                        break
+        words.add(syllables[syl_1] + syllables[syl_2] + syllables[syl_3])
+    return words
+
+
+def generate_words(syllables, f_cls, n_sylls=3, n_look_back=2, n_tries=1_000_000) -> List:
+    words = set()
+    all_idx = set(range(len(syllables)))
+    idx_sets = deque([all_idx]*n_look_back)
     for _ in tqdm(range(n_tries)):
         word = ""
-        idx_list = all_idx_list
         for _ in range(n_sylls):
-            if not idx_list:
+            if not idx_sets[-1]:
                 break
-            idx = random.choice(idx_list)
+            idx = random.choice(list(idx_sets[-1]))
             word += syllables[idx]
-            idx_set = generate_subset_sylls(idx, set(idx_list), f_cls)
-            idx_list = list(idx_set)
+            new_idx_set = generate_subset_sylls(idx, all_idx, f_cls)
+            idx_sets.append(new_idx_set.intersection(*idx_sets))
         words.add(word)
     return words
 
@@ -104,7 +125,6 @@ def generate_words():
         syllables_data: SyllablesData = pickle.load(f)
 
     print_obj(syllables_data)
-    exit()
 
     CVsyl = syllables_data.sylls
     xPhon = syllables_data.phons_rare
@@ -179,8 +199,6 @@ def generate_words():
     trips = [i for i in trips if i[0] not in xPhon]
 
     print("SELECT WORDS WITH UNIFORM BIGRAM AND NON-ZERO TRIGRAM LOG-PROBABILITY OF OCCURRENCE IN THE CORPUS")
-    print(trips)
-    exit()
     words = [i for i in tqdm(trips) if get_corpus_gram_stats(i, Gram2, Gram3)]
     print(len(words), len(trips))
 

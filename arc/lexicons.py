@@ -458,8 +458,6 @@ def gen_lexicons():
     with open(fname, 'rb') as f:
         fdata = pickle.load(f)
     Words = fdata[0]; Trips = fdata[1]
-    print(Trips)
-    exit()
 
     # KERNELS SIMULATING A STATIONARY OSCILLATORY SIGNAL AT THE FREQUENCY OF INTEREST (LAG = 3)
     patts = [tuple([i for i in np.roll((1, 0, 0, 1, 0, 0), j)]) for j in range(nPoss)]
@@ -471,8 +469,10 @@ def gen_lexicons():
     Feats = [binary_feature_matrix(i, numbs, phons, labls) for i in Sylls]
     Ovlap = compute_feats_overlap(Words, Feats, patts, nFeats=nFeat)
 
+    print(Words)
     # GENERATE SETS OF WORDS WITH UNIQUE SYLLABLES AND MINIMUM FEATURES OVERLAP ACROSS WORDS
     Sets_of_Words, Sets_of_Feats = generate_lexicon_sets(Words, Sylls, Feats, Ovlap)
+    print(Sets_of_Words)
     exit()
 
     # # SAVE LEXICONS
