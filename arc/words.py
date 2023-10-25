@@ -1,18 +1,9 @@
-import csv
-import os
-import pickle
 import random
 from collections import deque
-from typing import List
 
-import numpy as np
-from scipy.stats import stats
-from tqdm.rich import tqdm
-
-from arc.phonecodes import phonecodes
-from arc import CORPUS_DEFAULT_PATH, RESULTS_DEFAULT_PATH
-from arc.syllables import SYLLABLES_DEFAULT_PATH, BINARY_FEATURES_DEFAULT_PATH, read_binary_features, SyllablesData, \
-    Phonemes, print_obj
+from arc.functional import filter_iterable
+from arc.syllables import *
+from arc.types import *
 
 
 def generate_subset_sylls(iSyll, allIdx, f_Cls):
@@ -66,7 +57,7 @@ def generate_trisyll_word(syllables, f_cls):
 
 
 # CHECK IF A TRIPLET HAS NON-ZERO (gram) OR UNIFORM (Gram) BIGRAM AND TRIGRAM LOG-PROBABILITY
-def get_corpus_gram_stats(iTrip, Gram2, Gram3):
+def get_corpus_gram_stats_triplet(iTrip, Gram2, Gram3):
     """TODO: Change implementation for other syllables-settings?"""
     GoodT = True
     seg_1 = iTrip[1:4]
@@ -82,13 +73,39 @@ def get_corpus_gram_stats(iTrip, Gram2, Gram3):
     return GoodT
 
 
-def generate_nsyll_words(syllables, f_cls, n_sylls=3, n_look_back=2, n_tries=1_000_000) -> List:
+def has_valid_gram_stats(word: Word, valid_bigrams: NgramsList, valid_trigrams: NgramsList):
+    """TODO: Change implementation for other syllables-settings?"""
+    """Assuming that the individual syllables in the word are valid, we still have to check if the 
+    bigrams and trigrams that have formed at the syllable transitions are valid.
+    
+    Example:
+    word = "heː|pɛː|naː"
+    valid_sylls = ["heː", "pɛː", "naː"]
+    So, in addition, we have to check that the bigrams "eːp" and "ɛː|n" at the transitions are contained 
+    in the valid bigrams list
+    """
+    word = "".join([s.syll for s in word])
+    valid = True
+    seg_1 = word[1:4]
+    seg_2 = word[4:7]
+    if any(i not in valid_bigrams for i in [seg_1, seg_2]):
+        valid = False
+    seg_1 = word[0:4]
+    seg_2 = word[1:6]
+    seg_3 = word[3:7]
+    seg_4 = word[4:9]
+    if any(i not in valid_trigrams for i in [seg_1, seg_2, seg_3, seg_4]):
+        valid = False
+    return valid
+
+
+def generate_nsyll_words(syllables: SyllablesList, f_cls, n_sylls=3, n_look_back=2, n_tries=1_000_000) -> List:
     words = set()
     all_idx = set(range(len(syllables)))
     # idx_sets = deque([all_idx]*n_look_back)
     for _ in tqdm(range(n_tries)):
         while True:
-            syl_1 = syllables.index(random.sample(syllables, 1)[0])
+            syl_1 = random.sample(all_idx, 1)[0]
             set_1 = generate_subset_sylls(syl_1, all_idx, f_cls)
             if set_1:
                 syl_2 = random.sample(list(set_1), 1)[0]
@@ -98,11 +115,12 @@ def generate_nsyll_words(syllables, f_cls, n_sylls=3, n_look_back=2, n_tries=1_0
                     if set_3:
                         syl_3 = random.sample(list(set_3), 1)[0]
                         break
-        words.add(syllables[syl_1] + syllables[syl_2] + syllables[syl_3])
-    return words
+        word = tuple([syllables[syl_1], syllables[syl_2], syllables[syl_3]])
+        words.add(word)
+    return list(words)
 
 
-def generate_words(syllables, f_cls, n_sylls=3, n_look_back=2, n_tries=1_000_000) -> List:
+def generate_words_2(syllables, f_cls, n_sylls=3, n_look_back=2, n_tries=1_000_000) -> List:
     words = set()
     all_idx = set(range(len(syllables)))
     idx_sets = deque([all_idx]*n_look_back)
@@ -119,19 +137,47 @@ def generate_words(syllables, f_cls, n_sylls=3, n_look_back=2, n_tries=1_000_000
     return words
 
 
+def filter_rare_onset_phonemes(syllables: SyllablesList, phonemes: PhonemesList,
+                               p_threshold: float = 0.05) -> PhonemesList:
+    print("FIND SYLLABLES THAT ARE RARE AT THE ONSET OF A WORD")
+    candidate_onset_phonemes = set([syll.syll[0] for syll in syllables])
+
+    onset_phonemes = [x.phon for x in phonemes if x.order == 1]
+    all_phonemes = [x.phon for x in phonemes]
+
+    rare_phonemes = set()
+    for phon in tqdm(candidate_onset_phonemes):
+        phoneme_prob = onset_phonemes.count(phon) / all_phonemes.count(phon)
+        if phoneme_prob < p_threshold:
+            rare_phonemes.add(phon)
+    rare_phonemes = list(rare_phonemes)
+    return rare_phonemes
+
+
 def generate_words():
     print("LOAD SYLLABLES")
+
     with open(os.path.join(RESULTS_DEFAULT_PATH, "syllables.pickle"), 'rb') as f:
-        syllables_data: SyllablesData = pickle.load(f)
+        syllables: SyllablesList = pickle.load(f)
 
-    print_obj(syllables_data)
+    bin_feats = read_binary_features()
+    print(bin_feats)
 
-    CVsyl = syllables_data.sylls
-    xPhon = syllables_data.phons_rare
-    gram2 = syllables_data.bigrams
-    Gram2 = syllables_data.bigrams_prob_filtered
-    gram3 = syllables_data.trigrams
-    Gram3 = syllables_data.trigrams_prob_filtered
+    bigrams = read_bigrams()
+    print(bigrams[:10])
+
+    trigrams = read_trigrams()
+    print(trigrams[:10])
+
+    print("SELECT BIGRAMS WITH UNIFORM LOG-PROBABILITY OF OCCURRENCE IN THE CORPUS")
+    bigrams_uniform = filter_iterable(function=lambda s: s.p_unif > 0.05, iterable=bigrams)
+
+    print("SELECT TRIGRAMS WITH UNIFORM LOG-PROBABILITY OF OCCURRENCE IN THE CORPUS")
+    trigrams_uniform = filter_iterable(function=lambda s: s.p_unif > 0.05, iterable=trigrams)
+
+    CVsyl = [s.syll for s in syllables]
+    bigrams_list = [b.ngram for b in bigrams]
+    trigrams_list = [t.ngram for t in trigrams]
 
     bin_feat = read_binary_features(BINARY_FEATURES_DEFAULT_PATH)
     numbs = bin_feat.numbs
@@ -162,49 +208,63 @@ def generate_words():
              set(idx_Ä), set(idx_Ö), set(idx_Ü)]
     f_Cls = [f_Mnr, f_Plc, f_Vow]
 
-    RELOAD_WORDS = False
+    REGENERATE_WORDS = True
+    CHECK_VALID_GERMAN = False
 
-    if not os.path.exists(os.path.join(RESULTS_DEFAULT_PATH, 'words.csv')) or RELOAD_WORDS:
+    if not os.path.exists(os.path.join(RESULTS_DEFAULT_PATH, 'words.csv')) or REGENERATE_WORDS:
         print("GENERATE LIST OF TRISYLLABIC WORDS WITH NO OVERLAP OF COMPLEX PHONETIC FEATURES ACROSS SYLLABLES")
-        # words = list(set([generate_trisyll_word(CVsyl, f_Cls) for _ in tqdm(range(1000))]))
-        words = generate_nsyll_words(CVsyl, f_Cls)
+        # words = list(set([generate_trisyll_word(CVsyl, f_Cls) for _ in tqdm(range(1_000_000))]))
+        words = generate_nsyll_words(syllables, f_Cls)
         print("Words generated: ", len(words))
 
         # SAVE LIST OF TRIPLETS IN ONE CSV FILE
         with open(os.path.join(RESULTS_DEFAULT_PATH, 'words.csv'), 'w') as f:
             w = csv.writer(f)
             for word in words:
-                w.writerows([[word, 0]])
+                w.writerows([["".join([s.syll for s in word]), 0]])
+
+        with open(os.path.join(RESULTS_DEFAULT_PATH, 'words.pickle'), 'wb') as f:
+            pickle.dump(words, f, pickle.HIGHEST_PROTOCOL)
     else:
-        print("LOAD WORDS")
+        print("SKIPPING WORD GENERATION. LOADING WORDS FROM FILE")
+        with open(os.path.join(RESULTS_DEFAULT_PATH, "words.pickle"), 'rb') as f:
+            words: WordsList = pickle.load(f)
 
     # TO ENSURE THAT THE TRIPLETS CANNOT BE MISTAKEN FOR GERMAN WORDS,
     # WE INSTRUCTED A NATIVE GERMAN SPEAKER TO MARK EACH TRIPLET AS...
     #     '1' IF IT CORRESPONDS EXACTLY TO A GERMAN WORD
     #     '2' IF IT COULD BE MISTAKEN FOR A GERMAN WORD-GROUP WHEN PRONOUNCED ALOUD
-    #     '3' IF THE PRONOUNCIATION OF THE FIRST TWO SYLLABLES IS A WORD CANDIDATE,
-    #         i.e. the syllable pair could be mistaken for a German word or
+    #     '3' IF THE PRONUNCIATION OF THE FIRST TWO SYLLABLES IS A WORD CANDIDATE,
+    #         i.e. the syllable pair could be mistaken for a German word, or
     #         it evokes a strong prediction for a certain real German word
     #     '4' IF IT DOES NOT SOUND GERMAN AT ALL
     #         (that is, if the phoneme combination is illegal in German morphology
     #         [do not flag if rule exceptions exist])
     #     '0' OTHERWISE (that is, the item is good)
 
-    print("LOAD LIST OF TRIPLETS AND SELECT THOSE THAT CANNOT BE MISTAKEN FOR GERMAN WORDS")
-    fdata = list(csv.reader(open(os.path.join(RESULTS_DEFAULT_PATH, 'words.csv'), "r"), delimiter='\t'))
-
-    trips = [i[0] for i in [i[0].split(",") for i in fdata] if int(i[1]) == 0]
+    if CHECK_VALID_GERMAN:
+        print("LOAD WORDS FROM CSV FILE AND SELECT THOSE THAT CANNOT BE MISTAKEN FOR GERMAN WORDS")
+        fdata = list(csv.reader(open(os.path.join(RESULTS_DEFAULT_PATH, 'words.csv'), "r"), delimiter='\t'))
+        rows = [row[0].split(",") for row in fdata]
+        words_valid = [row[0] for row in rows if word[1] == "0"]
+        words_valid_german = []
+        for word in tqdm(words):
+            if tuple([s.syll for s in word]) in words_valid:
+                words_valid_german.append(word)
+        words = words_valid_german
 
     print("EXCLUDE WORDS WITH LOW ONSET SYLLABLE PROBABILITY")
-    trips = [i for i in trips if i[0] not in xPhon]
+    phonemes = read_phonemes()
+    rare_phonemes = filter_rare_onset_phonemes(syllables, phonemes)
+    words = filter_iterable(lambda w: w[0].syll[0] not in rare_phonemes, words)
 
     print("SELECT WORDS WITH UNIFORM BIGRAM AND NON-ZERO TRIGRAM LOG-PROBABILITY OF OCCURRENCE IN THE CORPUS")
-    words = [i for i in tqdm(trips) if get_corpus_gram_stats(i, Gram2, Gram3)]
-    print(len(words), len(trips))
+    words_valid_german = [word for word in tqdm(words) if has_valid_gram_stats(word, bigrams_list, trigrams_list)]
+    print(len(words_valid_german), len(words))
 
     print("SAVE WORDS")
     fname = os.path.join(RESULTS_DEFAULT_PATH, 'words.pickle')
-    fdata = [words, trips]
+    fdata = [words_valid_german, words]
     with open(fname, 'wb') as f:
         pickle.dump(fdata, f, pickle.HIGHEST_PROTOCOL)
 
