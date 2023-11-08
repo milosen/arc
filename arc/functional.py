@@ -155,7 +155,8 @@ def pseudo_rand_TP_struct(n_words=4, n_sylls_per_word=3):
 
 
 # COMPUTE EMPIRICAL RHYTHMICITY INDEX AT THE FREQUENCY OF INTEREST FOR A SEQUENCE OF SYLLABLES
-def compute_rhythmicity_index(trial, patts, numbs, phons, labels):
+def compute_rhythmicity_index(trial, patts, bin_feats):
+    numbs, phons, labels = bin_feats.numbs, bin_feats.phons, bin_feats.labels
     cnsnt = [i[0] for i in trial]
     vowel = [i[1:] for i in trial]
     stationarity_index = []
@@ -252,7 +253,8 @@ def theoretical_feats_idx(set_i, feats, patts, n_words=4, n_sylls_per_word=3):
 
 
 # EXTRACT BINARY FEATURE MATRIX FOR EACH PHONEME IN A SEQUENCE OF CV SYLLABLES
-def binary_feature_matrix(word, numbs, phons, labels):
+def binary_feature_matrix(word, bin_feats):
+    numbs, phons, labels = bin_feats.numbs, bin_feats.phons, bin_feats.labels
     sylls = [s.syll for s in word]
     cnsnt = [i[0] for i in sylls]
     vowel = [i[1:] for i in sylls]

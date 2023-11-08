@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import List, Tuple
+from typing import List, Tuple, Set
 
 
 @dataclass(frozen=True)
@@ -28,6 +28,7 @@ SyllablesList = List[Syllable]
 NgramsList = List[Ngram]
 Word = Tuple[Syllable, ...]
 WordsList = List[Word]
+Lexicon = Set[Word]
 
 
 @dataclass
