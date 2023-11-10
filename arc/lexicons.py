@@ -121,7 +121,7 @@ def generate_lexicon_sets(Words, Sylls, Feats, Ovlap):
     return Sets_of_Words, Sets_of_Feats
 
 
-def sample_min_overlap_lexicon(words, overlap, n_words=6, max_overlap=1, max_yields=100):
+def sample_min_overlap_lexicon(words, overlap, n_words=6, max_overlap=1, max_yields=10):
     overlap = np.array(overlap)
     options = dict((k, v) for k, v in locals().items() if not k == 'words' and not k == 'overlap')
     print(f"GENERATE MIN OVERLAP LEXICONS WITH OPTIONS {options}")
@@ -137,15 +137,21 @@ def sample_min_overlap_lexicon(words, overlap, n_words=6, max_overlap=1, max_yie
         # represent the matrix from above as a list of pairs of word indexes, e.g. [[0, 1], [0, 2], ...]
         valid_pairs = set(frozenset(i) for i in zip(*np.where(valid_word_pairs_matrix)))
 
+        def check_syll_pair(p):
+            li = [s.syll for i in p for s in words[i]]
+            return len(set(li)) == len(li)
+
+        valid_pairs = set(filter(check_syll_pair, valid_pairs))
+
         for start_pair in valid_pairs:
             # print(f"max overlap: {max_overlap}; start with pair: {i}/{len(valid_pairs)}")
             lexicon_indexes = set(start_pair)
 
             for candidate_idx in range(len(overlap)):
                 if candidate_idx not in lexicon_indexes:
-                    fits_with_known = [({known_idx, candidate_idx} in valid_pairs) for known_idx in lexicon_indexes]
+                    has_min_overlap = [({known_idx, candidate_idx} in valid_pairs) for known_idx in lexicon_indexes]
 
-                    if all(fits_with_known):
+                    if all(has_min_overlap):
                         lexicon_indexes.add(candidate_idx)
 
                         if len(lexicon_indexes) == n_words:
@@ -163,6 +169,32 @@ def sample_min_overlap_lexicon(words, overlap, n_words=6, max_overlap=1, max_yie
 
 def extract_lexicon_string(lexicon: Lexicon) -> str:
     return "".join(s.syll for word in lexicon for s in word)
+
+
+def sample_word_randomization(lexicon: Lexicon, randomized_word_indexes):
+    for iRand in range(N_RANDOMIZATIONS_PER_STREAM):
+
+        rand_words_lexicon = [list(lexicon)[i] for i in randomized_word_indexes[iRand]]
+        stream_word_randomized = [s.syll for word in rand_words_lexicon for s in word]
+
+        yield stream_word_randomized
+
+
+def sample_syllable_randomization(lexicon: Lexicon, randomized_syllable_indexes):
+    lexicon_syllables = [s.syll for word in lexicon for s in word]
+
+    for iRand in range(N_RANDOMIZATIONS_PER_STREAM):
+        stream_syllable_randomized = [lexicon_syllables[i] for i in randomized_syllable_indexes[iRand]]
+
+        yield stream_syllable_randomized
+
+
+def check_rhythmicity(stream, patterns, feats, max_ri=0.2):
+    rhythmicity_index = compute_rhythmicity_index(stream, patterns, feats)
+    if max(rhythmicity_index) <= max_ri:
+        return stream, rhythmicity_index
+
+    return None
 
 
 def gen_streams():
@@ -204,62 +236,70 @@ def gen_streams():
             randomized_syllable_indexes = fdata[1]
 
     # SELECT TP STRUCT STREAMS AND TP RANDOM STREAMS WITH MINIMUM RHYTHMICITY INDEX
-    TP_struct_trial = []
-    RI_struct_trial = []
-    TP_random_trial = []
-    RI_random_trial = []
-    Rhythmicity_max = []
-    N_TRIES_MINIMAL_LEXICON = 10000
-    MAX_RI = 0.2
+    MAX_RI = 0.5
 
-    for lexicon in sample_min_overlap_lexicon(words, overlap, n_words=N_WORDS_PER_LEXICON, max_overlap=1, max_yields=N_TRIES_MINIMAL_LEXICON):
-        tp_struct_trl = []
-        ri_struct_trl = []
-        tp_random_trl = []
-        ri_random_trl = []
-        lexicon_syllables = [s.syll for word in lexicon for s in word]
-        print(extract_lexicon_string(lexicon))
-        for iRand in range(N_RANDOMIZATIONS_PER_STREAM):
-            rand_words_lexicon = [list(lexicon)[i] for i in randomized_word_indexes[iRand]]
-            stream_word_randomized = [s.syll for word in rand_words_lexicon for s in word]
+    lexicon_generator_1 = sample_min_overlap_lexicon(words, overlap, n_words=4, max_overlap=1, max_yields=10000)
+    lexicon_generator_2 = sample_min_overlap_lexicon(words, overlap, n_words=4, max_overlap=1, max_yields=10000)
 
-            stream_syllable_randomized = [lexicon_syllables[i] for i in randomized_syllable_indexes[iRand]]
+    s1w = None
+    s1s = None
+    s2w = None
+    s2s = None
 
-            ri_word = compute_rhythmicity_index(stream_word_randomized, oscillation_patterns, bin_feat)
-            ri_syll = compute_rhythmicity_index(stream_syllable_randomized, oscillation_patterns, bin_feat)
+    for lexicon_1, lexicon_2 in itertools.product(lexicon_generator_1, lexicon_generator_2):
 
-            if max(ri_word) <= MAX_RI:
-                tp_struct_trl.append(stream_word_randomized)
-                ri_struct_trl.append(ri_word)
+        # check if the lexicons are compatible, i.e. they should not have repeating syllables
+        all_sylls = [s.syll for lexicon in [lexicon_1, lexicon_2] for word in lexicon for s in word]
+        if not len(set(all_sylls)) == len(all_sylls):
+            continue
 
-            if max(ri_syll) <= MAX_RI:
-                tp_random_trl.append(stream_syllable_randomized)
-                ri_random_trl.append(ri_syll)
+        print("Found compatible lexicons: ", extract_lexicon_string(lexicon_1), extract_lexicon_string(lexicon_2))
 
-        tp_struct_idx = np.argsort([max(i) for i in ri_struct_trl])[:nTrls]
-        TP_struct_trl = [tp_struct_trl[i] for i in tp_struct_idx]
-        RI_struct_trl = [ri_struct_trl[i] for i in tp_struct_idx]
-        tp_random_idx = np.argsort([max(i) for i in ri_random_trl])[:nTrls]
-        TP_random_trl = [tp_random_trl[i] for i in tp_random_idx]
-        RI_random_trl = [ri_random_trl[i] for i in tp_random_idx]
-        ri_struct_max = max(max(RI_struct_trl, default=[0]))
-        ri_random_max = max(max(RI_struct_trl, default=[0]))
-        rhythmicity_max = max([ri_struct_max, ri_random_max])
-        TP_struct_trial.append(TP_struct_trl)
-        TP_random_trial.append(TP_random_trl)
-        RI_struct_trial.append(RI_struct_trl)
-        RI_random_trial.append(RI_random_trl)
-        Rhythmicity_max.append(rhythmicity_max)
+        # generate good-RI streams
+        for stream_1_word_randomized in sample_word_randomization(lexicon_1, randomized_word_indexes):
+            s1w = check_rhythmicity(stream_1_word_randomized, oscillation_patterns, bin_feat)
+            if s1w:
+                break
 
-    best_RI = np.argsort(Rhythmicity_max)[:nSets]
-    TP_struct_stream = [TP_struct_trial[i] for i in best_RI]
-    TP_random_stream = [TP_random_trial[i] for i in best_RI]
-    RI_struct_stream = [RI_struct_trial[i] for i in best_RI]
-    RI_random_stream = [RI_random_trial[i] for i in best_RI]
+        if not s1w:
+            for stream in [s1w, s1s, s2w, s2s]:
+                print(stream)
+            continue
+
+        for stream_2_word_randomized in sample_word_randomization(lexicon_2, randomized_word_indexes):
+            s2w = check_rhythmicity(stream_2_word_randomized, oscillation_patterns, bin_feat)
+            if s2w:
+                break
+
+        if not s2w:
+            for stream in [s1w, s1s, s2w, s2s]:
+                print(stream)
+            continue
+
+        for stream_1_syll_randomized in sample_syllable_randomization(lexicon_1, randomized_syllable_indexes):
+            s1s = check_rhythmicity(stream_1_syll_randomized, oscillation_patterns, bin_feat)
+            if s1s:
+                break
+
+        if not s1s:
+            for stream in [s1w, s1s, s2w, s2s]:
+                print(stream)
+            continue
+
+        for stream_2_syll_randomized in sample_syllable_randomization(lexicon_2, randomized_syllable_indexes):
+            s2s = check_rhythmicity(stream_2_syll_randomized, oscillation_patterns, bin_feat)
+            if s2s:
+                break
+
+        if all([s1w, s1s, s2w, s2s]):
+            break
+
+    for stream in [s1w, s1s, s2w, s2s]:
+        print(stream)
 
     # SAVE LEXICON TRIALS
     fname = os.path.join(RESULTS_DEFAULT_PATH, 'streams.pickle')
-    fdata = [TP_struct_stream, TP_random_stream, RI_struct_stream, RI_random_stream]
+    fdata = [s1w, s1s, s2w, s2s]
     with open(fname, 'wb') as f:
         pickle.dump(fdata, f, pickle.HIGHEST_PROTOCOL)
 

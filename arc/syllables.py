@@ -16,7 +16,7 @@ def select_consonant_vowel(
     if prefix_mode == "single_consonant":
         prefix_length = 1
         consonants = list(filter(lambda x: len(x) == prefix_length, bin_feats.consonants))
-    elif postfix_mode == "multi_consonant":
+    elif prefix_mode == "multi_consonant":
         raise NotImplementedError(f"Multiple onset consonants not supported yet.")
     else:
         raise ValueError("Unknown prefix mode.")
