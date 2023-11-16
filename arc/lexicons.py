@@ -20,6 +20,7 @@ This script generates artificial lexicons composed of phonologically dissimilar 
 """
 import itertools
 import random
+from math import comb
 
 # PROJECT DIRECTORY
 project_dir = '/'
@@ -126,13 +127,19 @@ def sample_min_overlap_lexicon(words, overlap, n_words=6, max_overlap=1, max_yie
     options = dict((k, v) for k, v in locals().items() if not k == 'words' and not k == 'overlap')
     print(f"GENERATE MIN OVERLAP LEXICONS WITH OPTIONS {options}")
     yields = 0
-    for sup_overlap in range(max_overlap + 1):
-        if sup_overlap != 0:
-            print(f"Warning: Increasing allowed overlap to {sup_overlap}")
+
+    for max_pair_overlap, max_overlap_with_n_words in itertools.product(range(max_overlap + 1), range(1, comb(n_words, 2))):
+
+        max_cum_overlap = max_pair_overlap*max_overlap_with_n_words
+
+        if max_pair_overlap == 0:
+            print(f"Trying zero overlap")
+        else:
+            print(f"Warning: Increasing allowed overlaps: MAX_PAIRWISE_OVERLAP={max_pair_overlap}, MAX_CUM_OVERLAP={max_cum_overlap}")
 
         # WORDSxWORDS boolean matrix indicating if the words can be paired together
         # e.g. valid_word_pairs_matrix[0, 0] = False, bc. no word is parable with itself
-        valid_word_pairs_matrix = (overlap <= sup_overlap)
+        valid_word_pairs_matrix = (overlap <= max_pair_overlap)
 
         # represent the matrix from above as a list of pairs of word indexes, e.g. [[0, 1], [0, 2], ...]
         valid_pairs = set(frozenset(i) for i in zip(*np.where(valid_word_pairs_matrix)))
@@ -146,25 +153,30 @@ def sample_min_overlap_lexicon(words, overlap, n_words=6, max_overlap=1, max_yie
         for start_pair in valid_pairs:
             # print(f"max overlap: {max_overlap}; start with pair: {i}/{len(valid_pairs)}")
             lexicon_indexes = set(start_pair)
+            sum_overlaps = 0
 
             for candidate_idx in range(len(overlap)):
                 if candidate_idx not in lexicon_indexes:
                     has_min_overlap = [({known_idx, candidate_idx} in valid_pairs) for known_idx in lexicon_indexes]
 
                     if all(has_min_overlap):
-                        lexicon_indexes.add(candidate_idx)
+                        overlaps = [overlap[known_idx, candidate_idx] for known_idx in lexicon_indexes]
 
-                        if len(lexicon_indexes) == n_words:
-                            valid_sub_matrix = valid_word_pairs_matrix[np.ix_(list(lexicon_indexes), list(lexicon_indexes))]
-                            assert np.all(np.int32(valid_sub_matrix) == (1 - np.eye(n_words)))
-                            lexicon = set(map(lambda index: words[index], lexicon_indexes))
+                        if sum(overlaps) <= (max_cum_overlap-sum_overlaps):
+                            lexicon_indexes.add(candidate_idx)
+                            sum_overlaps += sum(overlaps)
 
-                            yield lexicon
+                            if len(lexicon_indexes) == n_words:
+                                valid_sub_matrix = valid_word_pairs_matrix[np.ix_(list(lexicon_indexes), list(lexicon_indexes))]
+                                assert np.all(np.int32(valid_sub_matrix) == (1 - np.eye(n_words)))
+                                lexicon = set(map(lambda index: words[index], lexicon_indexes))
 
-                            yields += 1
+                                yield lexicon, {"cumulative_overlap": sum_overlaps}
 
-                            if yields == max_yields:
-                                return
+                                yields += 1
+
+                                if yields == max_yields:
+                                    return
 
 
 def extract_lexicon_string(lexicon: Lexicon) -> str:
@@ -189,10 +201,10 @@ def sample_syllable_randomization(lexicon: Lexicon, randomized_syllable_indexes)
         yield stream_syllable_randomized
 
 
-def check_rhythmicity(stream, patterns, feats, max_ri=0.2):
+def check_rhythmicity(stream, patterns, feats, max_ri=0.1):
     rhythmicity_index = compute_rhythmicity_index(stream, patterns, feats)
     if max(rhythmicity_index) <= max_ri:
-        return stream, rhythmicity_index
+        return stream, {"rhythmicity_indexes": rhythmicity_index}
 
     return None
 
@@ -236,10 +248,45 @@ def gen_streams():
             randomized_syllable_indexes = fdata[1]
 
     # SELECT TP STRUCT STREAMS AND TP RANDOM STREAMS WITH MINIMUM RHYTHMICITY INDEX
-    MAX_RI = 0.5
 
-    lexicon_generator_1 = sample_min_overlap_lexicon(words, overlap, n_words=4, max_overlap=1, max_yields=10000)
-    lexicon_generator_2 = sample_min_overlap_lexicon(words, overlap, n_words=4, max_overlap=1, max_yields=10000)
+    lexicon_generator_1 = sample_min_overlap_lexicon(words, overlap, n_words=4, max_overlap=1, max_yields=1000)
+    lexicon_generator_2 = sample_min_overlap_lexicon(words, overlap, n_words=4, max_overlap=1, max_yields=1000)
+
+    # print words for test
+    print(["".join([s.syll for s in word]) for word in words])
+
+    # print pairwise lexicon generation
+    for (lexicon_1, info_1), (lexicon_2, info_2) in itertools.product(lexicon_generator_1, lexicon_generator_2):
+
+        # check if the lexicons are compatible, i.e. they should not have repeating syllables
+        all_sylls = [s.syll for lexicon in [lexicon_1, lexicon_2] for word in lexicon for s in word]
+        if not len(set(all_sylls)) == len(all_sylls):
+            continue
+
+        print("Found compatible lexicons: ", extract_lexicon_string(lexicon_1), extract_lexicon_string(lexicon_2))
+
+    # print lexicon and stream for test
+    for lexicon_1, info_1 in lexicon_generator_1:
+
+        print(extract_lexicon_string(lexicon_1), "Cumulative overlap:", info_1["cumulative_overlap"])
+
+        s1w = None
+        for stream_1_word_randomized in sample_word_randomization(lexicon_1, randomized_word_indexes):
+            s1w = check_rhythmicity(stream_1_word_randomized, oscillation_patterns, bin_feat)
+
+            if s1w:
+                break
+
+        if s1w:
+            print("Lexicon:", extract_lexicon_string(lexicon_1))
+            print("Cumulative overlap of words in lexicon:", info_1["cumulative_overlap"])
+
+            stream, stream_info = s1w
+            print("Stream: ", "".join(syllable for syllable in stream))
+            print("Rhythmicity Indexes: ", stream_info["rhythmicity_indexes"])
+            break
+
+    exit()
 
     s1w = None
     s1s = None
