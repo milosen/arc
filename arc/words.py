@@ -88,7 +88,7 @@ def has_valid_gram_stats(word: Word, valid_bigrams: NgramsList, valid_trigrams: 
     valid = True
     seg_1 = word[1:4]
     seg_2 = word[4:7]
-    if any(i not in valid_bigrams for i in [seg_1, seg_2]):
+    if seg_1 not in valid_bigrams or seg_2 not in valid_bigrams:
         valid = False
     seg_1 = word[0:4]
     seg_2 = word[1:6]
@@ -259,7 +259,8 @@ def generate_words():
     words = filter_iterable(lambda w: w[0].syll[0] not in rare_phonemes, words)
 
     print("SELECT WORDS WITH UNIFORM BIGRAM AND NON-ZERO TRIGRAM LOG-PROBABILITY OF OCCURRENCE IN THE CORPUS")
-    words_valid_german = [word for word in tqdm(words) if has_valid_gram_stats(word, bigrams_list, trigrams_list)]
+    # words_valid_german = [word for word in tqdm(words) if has_valid_gram_stats(word, bigrams_list, trigrams_list)]
+    words_valid_german = list(filter(lambda word: has_valid_gram_stats(word, bigrams_list, trigrams_list), tqdm(words)))
     print(len(words_valid_german), len(words))
 
     print("SAVE WORDS")

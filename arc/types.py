@@ -1,11 +1,14 @@
 from dataclasses import dataclass
-from typing import List, Tuple, Set
+from typing import List, Tuple, Set, Optional
+
+# syl, son, cons, cont, delrel, lat, nas, strid, voi, sg, cg, ant, cor, distr, lab, hi, lo, back, round, tense, long
 
 
 @dataclass(frozen=True)
 class Phoneme:
     phon: str
-    order: int
+    features: str
+    order: Optional[int]
 
 
 @dataclass(frozen=True)
