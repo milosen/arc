@@ -5,6 +5,7 @@ import random
 from typing import Callable, Iterable
 
 import numpy as np
+from tqdm.rich import tqdm
 
 from arc.definitions import LABELS_C, LABELS_V, N_FEAT
 
@@ -202,7 +203,7 @@ def compute_features_overlap(word_pair_features, patterns, c_sum: bool = True):
 # COMPUTE FEATURES OVERLAP FOR EACH PAIR OF WORDS
 def compute_word_overlap_matrix(words, features, oscillation_patterns):
     overlap = []
-    for idx_1 in range(len(words)):
+    for idx_1 in tqdm(range(len(words))):
         ovlap = []
         for idx_2 in range(len(words)):
             word_pair_features = [tuple(i + j) for i, j in zip(features[idx_1], features[idx_2])]
@@ -255,7 +256,7 @@ def theoretical_feats_idx(set_i, feats, patts, n_words=4, n_sylls_per_word=3):
 # EXTRACT BINARY FEATURE MATRIX FOR EACH PHONEME IN A SEQUENCE OF CV SYLLABLES
 def binary_feature_matrix(word, bin_feats):
     numbs, phons, labels = bin_feats.numbs, bin_feats.phons, bin_feats.labels
-    sylls = [s.syll for s in word]
+    sylls = [s.id for s in word.syllables]
     cnsnt = [i[0] for i in sylls]
     vowel = [i[1:] for i in sylls]
     Feats = []

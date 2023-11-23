@@ -7,7 +7,7 @@ from typing import List, Tuple, Set, Optional
 @dataclass(frozen=True)
 class Phoneme:
     phon: str
-    features: str
+    features: Optional[List[str]]
     order: Optional[int]
 
 

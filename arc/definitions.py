@@ -10,6 +10,8 @@ IPA_BIGRAMS_DEFAULT_PATH = os.path.join(CORPUS_DEFAULT_PATH, 'ipa_bigrams_german
 IPA_TRIGRAMS_DEFAULT_PATH = os.path.join(CORPUS_DEFAULT_PATH, 'ipa_trigrams_german.csv')
 IPA_SEG_DEFAULT_PATH = os.path.join(CORPUS_DEFAULT_PATH, 'german_IPA_seg.csv')
 
+PHONEME_FEATURE_LABELS = ["syl", "son", "cons", "cont", "delrel", "lat", "nas", "strid", "voi", "sg", "cg", "ant", "cor",
+                          "distr", "lab", "hi", "lo", "back", "round", "tense", "long"]
 LABELS_C = ['son', 'back', 'hi', 'lab', 'cor', 'cont', 'lat', 'nas', 'voi']
 LABELS_V = ['back', 'hi', 'lo', 'lab', 'tense']
 N_FEAT = len(LABELS_C) + len(LABELS_V)  # 14
