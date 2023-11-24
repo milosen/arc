@@ -2,6 +2,7 @@ import itertools
 import pickle
 import random
 from functools import reduce
+from math import comb
 from typing import Union, Any, Generator, Dict
 
 from arc.io import *
@@ -149,8 +150,8 @@ def read_phoneme_features(
     with open(binary_features_path, "r") as csv_file:
         fdata = list(csv.reader(csv_file))
 
-    phons = [i[0] for i in fdata[1:]]
-    feats = [i[1:] for i in fdata[1:]]
+    phons = [row[0] for row in fdata[1:]]
+    feats = [row[1:] for row in fdata[1:]]
 
     phonemes_dict = {}
     for phon, features in zip(phons, feats):
@@ -194,10 +195,11 @@ def read_syllables_with_phoneme_features(
             else:
                 multi_consonants.append(phoneme.id)
         else:
-            if phoneme.features[PHONEME_FEATURE_LABELS.index('long')] == "+":
-                long_vowels.append(phoneme.id)
-            else:
-                short_vowels.append(phoneme.id)
+            if len(phoneme.id) == 2:
+                if phoneme.features[PHONEME_FEATURE_LABELS.index('long')] == "+":
+                    long_vowels.append(phoneme.id)
+                else:
+                    short_vowels.append(phoneme.id)
 
     phonemes_mapping = {"c": single_consonants, "C": multi_consonants, "v": short_vowels, "V": long_vowels}
 
@@ -337,8 +339,8 @@ def export_speech_synthesiser(syllables: Iterable[Syllable]):
     v = ' '.join(v).replace('ɛ', 'ä').replace('ø', 'ö').replace('y', 'ü').split()
     t = [co + vo for co, vo in zip(c, v)]
     for syllable, text in zip(syllables, t):
-        synth_string = '<phoneme alphabet="ipa" ph=' + '"' + syllable.syll + '"' + '>' + text + '</phoneme>'
-        with open(os.path.join(syllables_dir, f'{str(syllable.syll[0:2])}.txt'), 'w') as f:
+        synth_string = '<phoneme alphabet="ipa" ph=' + '"' + syllable.id + '"' + '>' + text + '</phoneme>'
+        with open(os.path.join(syllables_dir, f'{str(syllable.id[0:2])}.txt'), 'w') as f:
             f.write(synth_string + "\n")
             csv.writer(f)
 
@@ -377,7 +379,28 @@ def generate_subset_sylls(iSyll, allIdx, f_Cls):
     return set_i
 
 
+def maybe_load_from_file(path, force_redo: bool = False):
+    def _outer_wrapper(wrapped_function):
+        def _wrapper(*args, **kwargs):
+            if not os.path.exists(path) or force_redo:
+                data = wrapped_function(*args, **kwargs)
+
+                with open(path, 'wb') as f:
+                    pickle.dump(data, f, pickle.HIGHEST_PROTOCOL)
+
+            else:
+                print("SKIPPING EXECUTION GENERATION. LOADING DATA FROM FILE")
+                with open(os.path.join(RESULTS_DEFAULT_PATH, "words.pickle"), 'rb') as f:
+                    data = pickle.load(f)
+
+            return data
+        return _wrapper
+    return _outer_wrapper
+
+
+@maybe_load_from_file(path=os.path.join(RESULTS_DEFAULT_PATH, "words.pickle"), force_redo=False)
 def generate_nsyll_words(syllables, f_cls, n_sylls=3, n_look_back=2, n_tries=1_000_000) -> List:
+    print("GENERATE LIST OF TRISYLLABIC WORDS WITH NO OVERLAP OF COMPLEX PHONETIC FEATURES ACROSS SYLLABLES")
     words = set()
     all_idx = set(range(len(syllables)))
     # idx_sets = deque([all_idx]*n_look_back)
@@ -447,6 +470,35 @@ def has_valid_gram_stats(word_obj, valid_bigrams, valid_trigrams):
     return valid
 
 
+def check_german(words: List[Word]):
+    # TODO
+    # SAVE WORDS IN ONE CSV FILE
+    with open(os.path.join(RESULTS_DEFAULT_PATH, 'words.csv'), 'w') as f:
+        writer = csv.writer(f)
+        for word in words:
+            writer.writerows([[word.id, 0]])
+
+    # TO ENSURE THAT THE TRIPLETS CANNOT BE MISTAKEN FOR GERMAN WORDS,
+    # WE INSTRUCTED A NATIVE GERMAN SPEAKER TO MARK EACH TRIPLET AS...
+    #     '1' IF IT CORRESPONDS EXACTLY TO A GERMAN WORD
+    #     '2' IF IT COULD BE MISTAKEN FOR A GERMAN WORD-GROUP WHEN PRONOUNCED ALOUD
+    #     '3' IF THE PRONUNCIATION OF THE FIRST TWO SYLLABLES IS A WORD CANDIDATE,
+    #         i.e. the syllable pair could be mistaken for a German word, or
+    #         it evokes a strong prediction for a certain real German word
+    #     '4' IF IT DOES NOT SOUND GERMAN AT ALL
+    #         (that is, if the phoneme combination is illegal in German morphology
+    #         [do not flag if rule exceptions exist])
+    #     '0' OTHERWISE (that is, the item is good)
+
+    print("LOAD WORDS FROM CSV FILE AND SELECT THOSE THAT CANNOT BE MISTAKEN FOR GERMAN WORDS")
+    with open(os.path.join(RESULTS_DEFAULT_PATH, "words.csv"), 'r') as f:
+        fdata = list(csv.reader(f, delimiter='\t'))
+    rows = [row[0].split(",") for row in fdata]
+    words = [row[0] for row in rows if row[1] == "0"]
+
+    return words
+
+
 def sample_min_overlap_lexicon(words, overlap, n_words=6, max_overlap=1, max_yields=10):
     overlap = np.array(overlap)
     options = dict((k, v) for k, v in locals().items() if not k == 'words' and not k == 'overlap')
@@ -470,7 +522,7 @@ def sample_min_overlap_lexicon(words, overlap, n_words=6, max_overlap=1, max_yie
         valid_pairs = set(frozenset(i) for i in zip(*np.where(valid_word_pairs_matrix)))
 
         def check_syll_pair(p):
-            li = [s.syll for i in p for s in words[i]]
+            li = [s.id for i in p for s in words[i].syllables]
             return len(set(li)) == len(li)
 
         valid_pairs = set(filter(check_syll_pair, valid_pairs))
@@ -494,9 +546,14 @@ def sample_min_overlap_lexicon(words, overlap, n_words=6, max_overlap=1, max_yie
                             if len(lexicon_indexes) == n_words:
                                 valid_sub_matrix = valid_word_pairs_matrix[np.ix_(list(lexicon_indexes), list(lexicon_indexes))]
                                 assert np.all(np.int32(valid_sub_matrix) == (1 - np.eye(n_words)))
-                                lexicon = set(map(lambda index: words[index], lexicon_indexes))
+                                word_ids = []
+                                word_objects = []
+                                for index in lexicon_indexes:
+                                    word_ids.append(words[index].id)
+                                    word_objects.append(words[index])
+                                lexicon = Lexicon(id="".join(word_ids), words=word_objects, info={"cumulative_overlap": sum_overlaps})
 
-                                yield lexicon, {"cumulative_overlap": sum_overlaps}
+                                yield lexicon
 
                                 yields += 1
 
@@ -504,31 +561,74 @@ def sample_min_overlap_lexicon(words, overlap, n_words=6, max_overlap=1, max_yie
                                     return
 
 
-if __name__ == '__main__':
+@maybe_load_from_file(path=os.path.join(RESULTS_DEFAULT_PATH, "words_filtered.pickle"), force_redo=True)
+def filter_words(words, sylls, native_phonemes):
+    print("EXCLUDE WORDS WITH LOW ONSET SYLLABLE PROBABILITY")
+    rare_phonemes = filter_rare_onset_phonemes(sylls, native_phonemes)
+    print("Rare onset phonemes:", [p.id for p in rare_phonemes])
 
+    # w[0][0] = first phoneme in first syllable if word w
+    words = list(filter(lambda w: w[0][0] not in rare_phonemes, tqdm(words)))
+
+    list_bigrams = [b.id for b in bigrams]
+    list_trigrams = [b.id for b in trigrams]
+
+    print("SELECT WORDS WITH UNIFORM BIGRAM AND NON-ZERO TRIGRAM LOG-PROBABILITY OF OCCURRENCE IN THE CORPUS")
+    words = list(filter(lambda w: has_valid_gram_stats(w, list_bigrams, list_trigrams), tqdm(words)))
+
+    return words
+
+
+def sample_word_randomization(lexicon: Lexicon, randomized_word_indexes):
+    for iRand in range(N_RANDOMIZATIONS_PER_STREAM):
+
+        rand_words_lexicon = [lexicon.words[i] for i in randomized_word_indexes[iRand]]
+        stream_word_randomized = [s.id for word in rand_words_lexicon for s in word.syllables]
+
+        yield stream_word_randomized
+
+
+def sample_syllable_randomization(lexicon: Lexicon, randomized_syllable_indexes):
+    lexicon_syllables = [s.id for word in lexicon.words for s in word]
+
+    for iRand in range(N_RANDOMIZATIONS_PER_STREAM):
+        stream_syllable_randomized = [lexicon_syllables[i] for i in randomized_syllable_indexes[iRand]]
+
+        yield stream_syllable_randomized
+
+
+def check_rhythmicity(stream, patterns, feats, max_ri=0.1):
+    rhythmicity_index = compute_rhythmicity_index(stream, patterns, feats)
+    if max(rhythmicity_index) <= max_ri:
+        return stream, {"rhythmicity_indexes": rhythmicity_index}
+
+    return None
+
+
+if __name__ == '__main__':
     sylls = list(from_syllables_corpus())
+
+    sylls = list(filter(lambda s: s.info["p_unif"] > 0.05, sylls))
 
     native_phonemes = read_ipa_seg_order_of_phonemes(return_as_dict=True)
 
-    native_sylls = filter(lambda s: all([(phon.id in native_phonemes) for phon in syll.phonemes]), sylls)
+    sylls = list(filter(lambda syll: all([(phon.id in native_phonemes) for phon in syll.phonemes]), sylls))
 
-    for syll in sylls:
-        print(f"{syll} has native phonemes: ", all([(phon.id in native_phonemes) for phon in syll.phonemes]))
-        # print(f"{syll} has native phonemes: ", syll in list(native_sylls))
-
-    # export_speech_synthesiser(sylls)
+    export_speech_synthesiser(sylls)
 
     bigrams = read_bigrams()
 
     trigrams = read_trigrams()
 
-    print("SELECT BIGRAMS WITH UNIFORM LOG-PROBABILITY OF OCCURRENCE IN THE CORPUS")
     bigrams_uniform = filter(lambda g: g.info["p_unif"] > 0.05, bigrams)
 
-    print("SELECT TRIGRAMS WITH UNIFORM LOG-PROBABILITY OF OCCURRENCE IN THE CORPUS")
     trigrams_uniform = filter(lambda g: g.info["p_unif"] > 0.05, trigrams)
 
-    labls = PHONEME_FEATURE_LABELS
+    SON = PHONEME_FEATURE_LABELS.index('son')
+    CONT = PHONEME_FEATURE_LABELS.index('cont')
+    LAB = PHONEME_FEATURE_LABELS.index('lab')
+    COR = PHONEME_FEATURE_LABELS.index('cor')
+    HI = PHONEME_FEATURE_LABELS.index('hi')
 
     i_Son, i_Plo, i_Fri, i_Lab, i_Den, i_Oth, idx_A, idx_E, idx_I, idx_O, idx_U, idx_AE, idx_OE, idx_UE \
         = tuple([] for _ in range(14))
@@ -536,15 +636,15 @@ if __name__ == '__main__':
     for i, syll in enumerate(sylls):
         onset_phoneme_features = syll[0].features
 
-        if onset_phoneme_features[labls.index('son')] == '+':
+        if onset_phoneme_features[SON] == '+':
             i_Son.append(i)
-        if onset_phoneme_features[labls.index('son')] != '+' and onset_phoneme_features[labls.index('cont')] != '+':
+        if onset_phoneme_features[SON] != '+' and onset_phoneme_features[CONT] != '+':
             i_Plo.append(i)
-        if onset_phoneme_features[labls.index('son')] != '+' and onset_phoneme_features[labls.index('cont')] == '+':
+        if onset_phoneme_features[SON] != '+' and onset_phoneme_features[CONT] == '+':
             i_Fri.append(i)
-        if onset_phoneme_features[labls.index('lab')] == '+':
+        if onset_phoneme_features[LAB] == '+':
             i_Lab.append(i)
-        if onset_phoneme_features[labls.index('cor')] == '+' and onset_phoneme_features[labls.index('hi')] != '+':
+        if onset_phoneme_features[COR] == '+' and onset_phoneme_features[HI] != '+':
             i_Den.append(i)
         if i not in i_Lab and i not in i_Den:
             i_Oth.append(i)
@@ -567,82 +667,16 @@ if __name__ == '__main__':
 
     f_manner = [set(i_Son), set(i_Plo), set(i_Fri)]
     f_place = [set(i_Oth), set(i_Lab), set(i_Den)]
-    f_vowel_identity = [set(idx_A), set(idx_E), set(idx_I), set(idx_O), set(idx_U),
-                        set(idx_AE), set(idx_OE), set(idx_UE)]
-    syllabic_features = [f_manner, f_place, f_vowel_identity]
+    f_vowel = [set(idx_A), set(idx_E), set(idx_I), set(idx_O), set(idx_U), set(idx_AE), set(idx_OE), set(idx_UE)]
+    syllabic_features = [f_manner, f_place, f_vowel]
 
-    syllables_list = [s.id for s in sylls]
-
-    REGENERATE_WORDS = False
+    REGENERATE_WORDS = True
     CHECK_VALID_GERMAN = False
+    REFILTER_WORDS = True
 
-    if not os.path.exists(os.path.join(RESULTS_DEFAULT_PATH, 'words.csv')) or REGENERATE_WORDS:
-        print("GENERATE LIST OF TRISYLLABIC WORDS WITH NO OVERLAP OF COMPLEX PHONETIC FEATURES ACROSS SYLLABLES")
-        # words = list(set([generate_trisyll_word(CVsyl, f_Cls) for _ in tqdm(range(1_000_000))]))
-        words: List[Word] = generate_nsyll_words(sylls, syllabic_features)
-        print("Words generated: ", len(words))
+    words: List[Word] = generate_nsyll_words(sylls, syllabic_features)
 
-        # SAVE WORDS IN ONE CSV FILE
-        with open(os.path.join(RESULTS_DEFAULT_PATH, 'words.csv'), 'w') as f:
-            writer = csv.writer(f)
-            for word in words:
-                writer.writerows([[word.id, 0]])
-
-        with open(os.path.join(RESULTS_DEFAULT_PATH, 'words.pickle'), 'wb') as f:
-            pickle.dump(words, f, pickle.HIGHEST_PROTOCOL)
-
-    else:
-        print("SKIPPING WORD GENERATION. LOADING WORDS FROM FILE")
-        with open(os.path.join(RESULTS_DEFAULT_PATH, "words.pickle"), 'rb') as f:
-            words: WordsList = pickle.load(f)
-
-    # TO ENSURE THAT THE TRIPLETS CANNOT BE MISTAKEN FOR GERMAN WORDS,
-    # WE INSTRUCTED A NATIVE GERMAN SPEAKER TO MARK EACH TRIPLET AS...
-    #     '1' IF IT CORRESPONDS EXACTLY TO A GERMAN WORD
-    #     '2' IF IT COULD BE MISTAKEN FOR A GERMAN WORD-GROUP WHEN PRONOUNCED ALOUD
-    #     '3' IF THE PRONUNCIATION OF THE FIRST TWO SYLLABLES IS A WORD CANDIDATE,
-    #         i.e. the syllable pair could be mistaken for a German word, or
-    #         it evokes a strong prediction for a certain real German word
-    #     '4' IF IT DOES NOT SOUND GERMAN AT ALL
-    #         (that is, if the phoneme combination is illegal in German morphology
-    #         [do not flag if rule exceptions exist])
-    #     '0' OTHERWISE (that is, the item is good)
-
-    # print("LOAD WORDS FROM CSV FILE AND SELECT THOSE THAT CANNOT BE MISTAKEN FOR GERMAN WORDS")
-    # with open(os.path.join(RESULTS_DEFAULT_PATH, "words.csv"), 'r') as f:
-    #     fdata = list(csv.reader(f, delimiter='\t'))
-    # rows = [row[0].split(",") for row in fdata]
-    # words = [row[0] for row in rows if row[1] == "0"]
-
-    REFILTER_WORDS = False
-
-    if not os.path.exists(os.path.join(RESULTS_DEFAULT_PATH, 'words_filtered.csv')) or REFILTER_WORDS:
-        print("EXCLUDE WORDS WITH LOW ONSET SYLLABLE PROBABILITY")
-        rare_phonemes = filter_rare_onset_phonemes(sylls, native_phonemes)
-        print("Rare onset phonemes:", [p.id for p in rare_phonemes])
-
-        # w[0][0] = first phoneme in first syllable if word w
-        words = list(filter(lambda w: w[0][0] not in rare_phonemes, tqdm(words)))
-
-        list_bigrams = [b.id for b in bigrams]
-        list_trigrams = [b.id for b in trigrams]
-
-        print("SELECT WORDS WITH UNIFORM BIGRAM AND NON-ZERO TRIGRAM LOG-PROBABILITY OF OCCURRENCE IN THE CORPUS")
-        words = list(filter(lambda w: has_valid_gram_stats(w, list_bigrams, list_trigrams), tqdm(words)))
-
-        # SAVE WORDS IN ONE CSV FILE
-        with open(os.path.join(RESULTS_DEFAULT_PATH, 'words_filtered.csv'), 'w') as f:
-            writer = csv.writer(f)
-            for word in words:
-                writer.writerows([[word.id, 0]])
-
-        with open(os.path.join(RESULTS_DEFAULT_PATH, 'words_filtered.pickle'), 'wb') as f:
-            pickle.dump(words, f, pickle.HIGHEST_PROTOCOL)
-
-    else:
-        print("SKIPPING WORD GENERATION. LOADING WORDS FROM FILE")
-        with open(os.path.join(RESULTS_DEFAULT_PATH, "words_filtered.pickle"), 'rb') as f:
-            words: List[Word] = pickle.load(f)
+    words: List[Word] = filter_words(words, sylls, native_phonemes)
 
     print(len(words))
 
@@ -654,10 +688,10 @@ if __name__ == '__main__':
     print("EXTRACT MATRIX OF BINARY FEATURES FOR EACH TRIPLET AND COMPUTE FEATURES OVERLAP FOR EACH PAIR")
     features = list(map(lambda w: binary_feature_matrix(w, bin_feat), tqdm(words)))
 
-    print("compute_word_overlap_matrix")
+    print("compute word overlap matrix")
     overlap = compute_word_overlap_matrix(words=words, features=features, oscillation_patterns=oscillation_patterns)
 
-    REGENERATE_STREAM_RANDOMIZATION = True
+    REGENERATE_STREAM_RANDOMIZATION = False
     if not os.path.exists(
             os.path.join(RESULTS_DEFAULT_PATH, 'random_streams_indexes.pickle')) or REGENERATE_STREAM_RANDOMIZATION:
         # GENERATE PSEUDO-RANDOM STREAMS OF SYLLABLES CONTROLLING FOR TPs
@@ -682,42 +716,6 @@ if __name__ == '__main__':
             randomized_syllable_indexes = fdata[1]
 
     # SELECT TP STRUCT STREAMS AND TP RANDOM STREAMS WITH MINIMUM RHYTHMICITY INDEX
-
-    lexicon_generator_1 = sample_min_overlap_lexicon(words, overlap, n_words=4, max_overlap=1, max_yields=1000)
-    lexicon_generator_2 = sample_min_overlap_lexicon(words, overlap, n_words=4, max_overlap=1, max_yields=1000)
-
-    # print pairwise lexicon generation
-    for (lexicon_1, info_1), (lexicon_2, info_2) in itertools.product(lexicon_generator_1, lexicon_generator_2):
-
-        # check if the lexicons are compatible, i.e. they should not have repeating syllables
-        all_sylls = [s.syll for lexicon in [lexicon_1, lexicon_2] for word in lexicon for s in word]
-        if not len(set(all_sylls)) == len(all_sylls):
-            continue
-
-        print("Found compatible lexicons: ", "".join(s.id for word in lexicon_1 for s in word), "".join(s.id for word in lexicon_2 for s in word))
-
-    exit()
-
-    # print lexicon and stream for test
-    for lexicon_1, info_1 in lexicon_generator_1:
-
-        print(extract_lexicon_string(lexicon_1), "Cumulative overlap:", info_1["cumulative_overlap"])
-
-        s1w = None
-        for stream_1_word_randomized in sample_word_randomization(lexicon_1, randomized_word_indexes):
-            s1w = check_rhythmicity(stream_1_word_randomized, oscillation_patterns, bin_feat)
-
-            if s1w:
-                break
-
-        if s1w:
-            print("Lexicon:", extract_lexicon_string(lexicon_1))
-            print("Cumulative overlap of words in lexicon:", info_1["cumulative_overlap"])
-
-            stream, stream_info = s1w
-            print("Stream: ", "".join(syllable for syllable in stream))
-            print("Rhythmicity Indexes: ", stream_info["rhythmicity_indexes"])
-            break
 
     exit()
 
