@@ -12,6 +12,12 @@ IPA_SEG_DEFAULT_PATH = os.path.join(CORPUS_DEFAULT_PATH, 'german_IPA_seg.csv')
 
 PHONEME_FEATURE_LABELS = ["syl", "son", "cons", "cont", "delrel", "lat", "nas", "strid", "voi", "sg", "cg", "ant", "cor",
                           "distr", "lab", "hi", "lo", "back", "round", "tense", "long"]
+SON = PHONEME_FEATURE_LABELS.index('son')
+CONT = PHONEME_FEATURE_LABELS.index('cont')
+LAB = PHONEME_FEATURE_LABELS.index('lab')
+COR = PHONEME_FEATURE_LABELS.index('cor')
+HI = PHONEME_FEATURE_LABELS.index('hi')
+
 LABELS_C = ['son', 'back', 'hi', 'lab', 'cor', 'cont', 'lat', 'nas', 'voi']
 LABELS_V = ['back', 'hi', 'lo', 'lab', 'tense']
 N_FEAT = len(LABELS_C) + len(LABELS_V)  # 14

@@ -1,11 +1,10 @@
+import csv
 import itertools
 import pickle
 import random
 from functools import reduce
 from math import comb
-from typing import Union, Any, Generator, Dict
-
-from arc.io import *
+from typing import Union, Any, Generator, Dict, Iterable
 
 import itertools
 import pickle
@@ -14,99 +13,13 @@ from functools import reduce
 from typing import Union, Any, Generator, List, Tuple, Dict, Set
 
 from pydantic import BaseModel, ValidationError, PositiveInt
+from scipy import stats
+from tqdm.rich import tqdm
 
-from arc.functional import binary_feature_matrix, compute_word_overlap_matrix, map_iterable, pseudo_rand_TP_struct, \
-    pseudo_rand_TP_random, compute_rhythmicity_index
-
-
-class BaseDictARC(ABC):
-    def full_str(self):
-        """recursive string representation"""
-        full_str = "["
-        for entry in self.decompose():
-            full_str += entry.full_str()
-            full_str += ", "
-        full_str = full_str[:-2]
-        full_str += "]"
-        return f"{self.__str__()} -> {full_str}"
-
-    def as_dict(self):
-        """recursive dict representation"""
-        full_dict = {}
-        full_list = []
-        for entry in self.decompose():
-            next_level = entry.as_dict()
-            if isinstance(next_level, str):
-                full_list.append(next_level)
-            else:
-                full_dict.update(**next_level)
-
-        return {self.__str__(): full_dict or full_list}
-
-    def get_vals(self, key: str) -> List:
-        return [entry.info[key] for entry in self.decompose()]
-
-    def __getitem__(self, item):
-        return self.decompose()[item]
-
-    @abstractmethod
-    def decompose(self):
-        pass
-
-
-class Phoneme(BaseModel, BaseDictARC):
-    id: str
-    info: Dict[str, Any]
-    order: List[PositiveInt]
-    features: List[str]
-
-    def __str__(self):
-        return self.id
-
-    def full_str(self):
-        return self.__str__()
-
-    def decompose(self):
-        return []
-
-    def as_dict(self):
-        return self.id
-
-
-class Syllable(BaseModel, BaseDictARC):
-    id: str
-    phonemes: List[Phoneme]
-    info: Dict[str, Any]
-
-    def __str__(self):
-        return self.id
-
-    def decompose(self):
-        return self.phonemes
-
-
-class Word(BaseModel, BaseDictARC):
-    id: str
-    syllables: List[Syllable]
-    info: Dict[str, Any]
-
-    def __str__(self):
-        return self.id
-
-    def decompose(self):
-        return self.syllables
-
-
-class Lexicon(BaseModel, BaseDictARC):
-    id: str
-    words: List[Word]
-    info: Dict[str, Any]
-
-    def __str__(self):
-        return [w.id for w in self.words].__str__()
-
-    def decompose(self):
-        return self.words
+from arc.definitions import *
+from arc.functional import *
+from arc.phonecodes import phonecodes
+from arc.types import *
 
 
 def read_ipa_seg_order_of_phonemes(
@@ -167,10 +80,10 @@ def read_phoneme_features(
     return phonemes_dict.values()
 
 
-def read_syllables_with_phoneme_features(
+def read_feature_syllables(
     phoneme_pattern: Union[str, list] = "cV",
     return_as_dict: bool = False
-)-> Union[Iterable[Syllable], Dict[str, Syllable]]:
+) -> Union[List[Syllable], Dict[str, Syllable]]:
     """Generate syllables form feature-phonemes. Only keep syllables that follow the phoneme pattern"""
     phonemes = read_phoneme_features(return_as_dict=True)
 
@@ -219,7 +132,7 @@ def read_syllables_with_phoneme_features(
     if return_as_dict:
         return syllables_phoneme_comb
 
-    return syllables_phoneme_comb.values()
+    return list(syllables_phoneme_comb.values())
 
 
 def read_syllables_corpus(
@@ -318,7 +231,7 @@ def from_syllables_corpus(
 
     syllables = read_syllables_corpus(syllables_corpus_path)
 
-    valid_syllables = read_syllables_with_phoneme_features(phoneme_pattern, return_as_dict=True)
+    valid_syllables = read_feature_syllables(phoneme_pattern, return_as_dict=True)
 
     for syllable in syllables:
         if syllable.id in valid_syllables:
@@ -605,8 +518,104 @@ def check_rhythmicity(stream, patterns, feats, max_ri=0.1):
     return None
 
 
+def merge_with_corpus(feature_syllables, syllables_corpus_path: str = SYLLABLES_DEFAULT_PATH):
+    corpus_syllables = read_syllables_corpus(syllables_corpus_path)
+    if not isinstance(feature_syllables, dict):
+        raise TypeError(f"Please make sure you provide the feature-syllables as a dict "
+                        f"(e.g. read_syllables_with_phoneme_features('cV', return_as_dict=True)). "
+                        f"This will make the matching go much faster")
+
+    merged_syllables = []
+    for syllable in corpus_syllables:
+        if syllable.id in feature_syllables:
+            merged_syllables.append(Syllable(
+                id=syllable.id,
+                info=syllable.info,
+                phonemes=feature_syllables[syllable.id].phonemes
+            ))
+
+    return merged_syllables
+
+
+def syllabic_features_from_list(syllables_list: List[Syllable]) -> List[Set[PositiveInt]]:
+    i_son, i_plo, i_fri, i_lab, i_den, i_oth, idx_a, idx_e, idx_i, idx_o, idx_u, idx_ae, idx_oe, idx_ue \
+        = tuple([] for _ in range(14))
+
+    for i, syll in enumerate(syllables_list):
+        onset_phoneme_features = syll[0].features
+
+        if onset_phoneme_features[SON] == '+':
+            i_son.append(i)
+        if onset_phoneme_features[SON] != '+' and onset_phoneme_features[CONT] != '+':
+            i_plo.append(i)
+        if onset_phoneme_features[SON] != '+' and onset_phoneme_features[CONT] == '+':
+            i_fri.append(i)
+        if onset_phoneme_features[LAB] == '+':
+            i_lab.append(i)
+        if onset_phoneme_features[COR] == '+' and onset_phoneme_features[HI] != '+':
+            i_den.append(i)
+        if i not in i_lab and i not in i_den:
+            i_oth.append(i)
+        if 'a' in syll.id:
+            idx_a.append(i)
+        if 'e' in syll.id:
+            idx_e.append(i)
+        if 'i' in syll.id:
+            idx_i.append(i)
+        if 'o' in syll.id:
+            idx_o.append(i)
+        if 'u' in syll.id:
+            idx_u.append(i)
+        if 'ɛ' in syll.id:
+            idx_ae.append(i)
+        if 'ø' in syll.id:
+            idx_oe.append(i)
+        if 'y' in syll.id:
+            idx_ue.append(i)
+
+    f_manner = [set(i_son), set(i_plo), set(i_fri)]
+    f_place = [set(i_oth), set(i_lab), set(i_den)]
+    f_vowel = [set(idx_a), set(idx_e), set(idx_i), set(idx_o), set(idx_u), set(idx_ae), set(idx_oe), set(idx_ue)]
+    syllabic_features = [f_manner, f_place, f_vowel]
+
+    return syllabic_features
+
+
+def read_binary_features(binary_features_path: str = BINARY_FEATURES_DEFAULT_PATH) -> BinaryFeatures:
+    print("READ MATRIX OF BINARY FEATURES FOR ALL IPA PHONEMES")
+    fdata = list(csv.reader(open(binary_features_path, "r")))
+    labels = fdata[0][1:]
+    phons = [i[0] for i in fdata[1:]]
+    numbs = [i[1:] for i in fdata[1:]]
+
+    consonants = []
+    for phon, numb in zip(phons, numbs):
+        if numb[labels.index('cons')] == '+':
+            consonants.append(phon)
+
+    long_vowels = []
+    for phon, numb in zip(phons, numbs):
+        if numb[labels.index('long')] == '+' and phon not in consonants:
+            long_vowels.append(phon)
+
+    bin_feats = BinaryFeatures(
+        labels=labels,
+        labels_c=LABELS_C,
+        labels_v=LABELS_V,
+        phons=phons,
+        numbs=numbs,
+        consonants=consonants,
+        long_vowels=long_vowels,
+        n_features=(len(LABELS_C) + len(LABELS_V))
+    )
+
+    return bin_feats
+
+
 if __name__ == '__main__':
-    sylls = list(from_syllables_corpus())
+    feature_syllables = read_feature_syllables("cV", return_as_dict=True)
+
+    sylls = merge_with_corpus(feature_syllables)
 
     sylls = list(filter(lambda s: s.info["p_unif"] > 0.05, sylls))
 
@@ -624,51 +633,7 @@ if __name__ == '__main__':
 
     trigrams_uniform = filter(lambda g: g.info["p_unif"] > 0.05, trigrams)
 
-    SON = PHONEME_FEATURE_LABELS.index('son')
-    CONT = PHONEME_FEATURE_LABELS.index('cont')
-    LAB = PHONEME_FEATURE_LABELS.index('lab')
-    COR = PHONEME_FEATURE_LABELS.index('cor')
-    HI = PHONEME_FEATURE_LABELS.index('hi')
-
-    i_Son, i_Plo, i_Fri, i_Lab, i_Den, i_Oth, idx_A, idx_E, idx_I, idx_O, idx_U, idx_AE, idx_OE, idx_UE \
-        = tuple([] for _ in range(14))
-
-    for i, syll in enumerate(sylls):
-        onset_phoneme_features = syll[0].features
-
-        if onset_phoneme_features[SON] == '+':
-            i_Son.append(i)
-        if onset_phoneme_features[SON] != '+' and onset_phoneme_features[CONT] != '+':
-            i_Plo.append(i)
-        if onset_phoneme_features[SON] != '+' and onset_phoneme_features[CONT] == '+':
-            i_Fri.append(i)
-        if onset_phoneme_features[LAB] == '+':
-            i_Lab.append(i)
-        if onset_phoneme_features[COR] == '+' and onset_phoneme_features[HI] != '+':
-            i_Den.append(i)
-        if i not in i_Lab and i not in i_Den:
-            i_Oth.append(i)
-        if 'a' in syll.id:
-            idx_A.append(i)
-        if 'e' in syll.id:
-            idx_E.append(i)
-        if 'i' in syll.id:
-            idx_I.append(i)
-        if 'o' in syll.id:
-            idx_O.append(i)
-        if 'u' in syll.id:
-            idx_U.append(i)
-        if 'ɛ' in syll.id:
-            idx_AE.append(i)
-        if 'ø' in syll.id:
-            idx_OE.append(i)
-        if 'y' in syll.id:
-            idx_UE.append(i)
-
-    f_manner = [set(i_Son), set(i_Plo), set(i_Fri)]
-    f_place = [set(i_Oth), set(i_Lab), set(i_Den)]
-    f_vowel = [set(idx_A), set(idx_E), set(idx_I), set(idx_O), set(idx_U), set(idx_AE), set(idx_OE), set(idx_UE)]
-    syllabic_features = [f_manner, f_place, f_vowel]
+    syllabic_features = syllabic_features_from_list(sylls)
 
     REGENERATE_WORDS = True
     CHECK_VALID_GERMAN = False
@@ -715,23 +680,24 @@ if __name__ == '__main__':
             randomized_word_indexes = fdata[0]
             randomized_syllable_indexes = fdata[1]
 
-    # SELECT TP STRUCT STREAMS AND TP RANDOM STREAMS WITH MINIMUM RHYTHMICITY INDEX
-
-    exit()
+    print("SELECT TP STRUCT STREAMS AND TP RANDOM STREAMS WITH MINIMUM RHYTHMICITY INDEX")
 
     s1w = None
     s1s = None
     s2w = None
     s2s = None
 
+    lexicon_generator_1 = sample_min_overlap_lexicon(words, overlap, n_words=4, max_overlap=1, max_yields=1000)
+    lexicon_generator_2 = sample_min_overlap_lexicon(words, overlap, n_words=4, max_overlap=1, max_yields=1000)
+
     for lexicon_1, lexicon_2 in itertools.product(lexicon_generator_1, lexicon_generator_2):
 
         # check if the lexicons are compatible, i.e. they should not have repeating syllables
-        all_sylls = [s.syll for lexicon in [lexicon_1, lexicon_2] for word in lexicon for s in word]
+        all_sylls = [s.id for lexicon in [lexicon_1, lexicon_2] for word in lexicon.words for s in word.syllables]
         if not len(set(all_sylls)) == len(all_sylls):
             continue
 
-        print("Found compatible lexicons: ", extract_lexicon_string(lexicon_1), extract_lexicon_string(lexicon_2))
+        print("Found compatible lexicons: ", lexicon_1.id, lexicon_2.id)
 
         # generate good-RI streams
         for stream_1_word_randomized in sample_word_randomization(lexicon_1, randomized_word_indexes):
