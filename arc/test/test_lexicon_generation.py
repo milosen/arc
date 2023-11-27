@@ -30,14 +30,7 @@ if __name__ == '__main__':
         if not len(set(all_sylls)) == len(all_sylls):
             continue
 
-        print("Found compatible lexicons: ", lexicon_1.id, lexicon_2.id)
-
-    # print lexicon and stream for test
-    lexicon_generator = sample_min_overlap_lexicon(words, overlap, n_words=4, max_overlap=1, max_yields=1000)
-
-    for lexicon in lexicon_generator:
-
-        print(lexicon.id, lexicon.info["cumulative_overlap"])
+        print("Found compatible lexicons: ", lexicon_1.id, lexicon_1.info["cumulative_overlap"], lexicon_2.id, lexicon_2.info["cumulative_overlap"])
 
         s1w = None
         for stream_1_word_randomized in sample_word_randomization(lexicon, randomized_word_indexes):

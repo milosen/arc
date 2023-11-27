@@ -146,12 +146,9 @@ def read_syllables_corpus(
 
     syllables_dict: Dict[str, Syllable] = {}
 
-    freqs = [int(syll_stats[2]) for syll_stats in fdata[1:]]
-    p_vals_uniform = stats.uniform.sf(abs(stats.zscore(np.log(freqs))))
-
-    for syll_stats, p_val_uniform in zip(fdata[1:], p_vals_uniform):
+    for syll_stats in fdata[1:]:
         syll_ipa = phonecodes.xsampa2ipa(syll_stats[1], 'deu')
-        info = {"freq": int(syll_stats[2]), "prob": float(syll_stats[3]), "p_unif": p_val_uniform}
+        info = {"freq": int(syll_stats[2]), "prob": float(syll_stats[3])}
         if syll_ipa not in syllables_dict or syllables_dict[syll_ipa].info != info:
             syllables_dict[syll_ipa] = Syllable(id=syll_ipa, phonemes=[], info=info)
         else:
@@ -502,7 +499,7 @@ def sample_word_randomization(lexicon: Lexicon, randomized_word_indexes):
 
 
 def sample_syllable_randomization(lexicon: Lexicon, randomized_syllable_indexes):
-    lexicon_syllables = [s.id for word in lexicon.words for s in word]
+    lexicon_syllables = [s.id for word in lexicon.words for s in word.syllables]
 
     for iRand in range(N_RANDOMIZATIONS_PER_STREAM):
         stream_syllable_randomized = [lexicon_syllables[i] for i in randomized_syllable_indexes[iRand]]
@@ -617,20 +614,19 @@ if __name__ == '__main__':
 
     sylls = merge_with_corpus(feature_syllables)
 
-    sylls = list(filter(lambda s: s.info["p_unif"] > 0.05, sylls))
+    freqs = [s.info["freq"] for s in sylls]
+    p_vals_uniform = stats.uniform.sf(abs(stats.zscore(np.log(freqs))))
+    sylls = [s[0] for s in filter(lambda s: s[1] > 0.05, zip(sylls, p_vals_uniform))]
 
     native_phonemes = read_ipa_seg_order_of_phonemes(return_as_dict=True)
-
     sylls = list(filter(lambda syll: all([(phon.id in native_phonemes) for phon in syll.phonemes]), sylls))
 
     export_speech_synthesiser(sylls)
 
     bigrams = read_bigrams()
-
     trigrams = read_trigrams()
 
     bigrams_uniform = filter(lambda g: g.info["p_unif"] > 0.05, bigrams)
-
     trigrams_uniform = filter(lambda g: g.info["p_unif"] > 0.05, trigrams)
 
     syllabic_features = syllabic_features_from_list(sylls)
@@ -638,6 +634,7 @@ if __name__ == '__main__':
     REGENERATE_WORDS = True
     CHECK_VALID_GERMAN = False
     REFILTER_WORDS = True
+    REGENERATE_STREAM_RANDOMIZATION = False
 
     words: List[Word] = generate_nsyll_words(sylls, syllabic_features)
 
@@ -656,7 +653,6 @@ if __name__ == '__main__':
     print("compute word overlap matrix")
     overlap = compute_word_overlap_matrix(words=words, features=features, oscillation_patterns=oscillation_patterns)
 
-    REGENERATE_STREAM_RANDOMIZATION = False
     if not os.path.exists(
             os.path.join(RESULTS_DEFAULT_PATH, 'random_streams_indexes.pickle')) or REGENERATE_STREAM_RANDOMIZATION:
         # GENERATE PSEUDO-RANDOM STREAMS OF SYLLABLES CONTROLLING FOR TPs
@@ -679,6 +675,82 @@ if __name__ == '__main__':
             fdata = pickle.load(f)
             randomized_word_indexes = fdata[0]
             randomized_syllable_indexes = fdata[1]
+
+    lexicon_generator_1 = sample_min_overlap_lexicon(words, overlap, n_words=4, max_overlap=1, max_yields=1000)
+
+    s1w = None
+    for lexicon_1 in lexicon_generator_1:
+        for stream_1_word_randomized in sample_word_randomization(lexicon_1, randomized_word_indexes):
+            s1w = check_rhythmicity(stream_1_word_randomized, oscillation_patterns, bin_feat, max_ri=0.09)
+
+            if s1w:
+                break
+
+        if not s1w:
+            continue
+
+        break
+
+    if s1w:
+        stream, info = s1w
+        print("Stream 1: ", "".join(syllable for syllable in stream))
+        print("Rhythmicity Indexes 1: ", info["rhythmicity_indexes"])
+        print("Found lexicon: ", lexicon_1.id, lexicon_1.info["cumulative_overlap"])
+    else:
+        print("Nothing found")
+
+    exit()
+
+    s1w, s2w = None, None
+    lexicon_generator_1 = sample_min_overlap_lexicon(words, overlap, n_words=4, max_overlap=1, max_yields=1000)
+    lexicon_generator_2 = sample_min_overlap_lexicon(words, overlap, n_words=4, max_overlap=1, max_yields=1000)
+
+    # print pairwise lexicon generation
+    for lexicon_1, lexicon_2 in itertools.product(lexicon_generator_1, lexicon_generator_2):
+
+        # check if the lexicons are compatible, i.e. they should not have repeating syllables
+        all_sylls = [s.id for lexicon in [lexicon_1, lexicon_2] for word in lexicon.words for s in word.syllables]
+        if not len(set(all_sylls)) == len(all_sylls):
+            continue
+
+        print("Found compatible lexicons: ", lexicon_1.id, lexicon_1.info["cumulative_overlap"], lexicon_2.id,
+              lexicon_2.info["cumulative_overlap"])
+
+        s1w = None
+        for stream_1_word_randomized in sample_word_randomization(lexicon_1, randomized_word_indexes):
+            s1w = check_rhythmicity(stream_1_word_randomized, oscillation_patterns, bin_feat)
+
+            if s1w:
+                break
+
+        if not s1w:
+            continue
+
+        s2w = None
+        for stream_2_word_randomized in sample_word_randomization(lexicon_2, randomized_word_indexes):
+            s2w = check_rhythmicity(stream_2_word_randomized, oscillation_patterns, bin_feat)
+
+            if s2w:
+                break
+
+        if not s2w:
+            continue
+
+        break
+
+    if s1w and s2w:
+        stream1, stream_info1 = s1w
+        stream2, stream_info2 = s2w
+        print("Stream 1: ", "".join(syllable for syllable in stream1))
+        print("Stream 2: ", "".join(syllable for syllable in stream2))
+        print("Rhythmicity Indexes 1: ", stream_info1["rhythmicity_indexes"])
+        print("Rhythmicity Indexes 2: ", stream_info2["rhythmicity_indexes"])
+        print("Found compatible lexicons: ", lexicon_1.id, lexicon_1.info["cumulative_overlap"], lexicon_2.id,
+              lexicon_2.info["cumulative_overlap"])
+    else:
+        print("Nothing found")
+
+    exit()
 
     print("SELECT TP STRUCT STREAMS AND TP RANDOM STREAMS WITH MINIMUM RHYTHMICITY INDEX")
 
