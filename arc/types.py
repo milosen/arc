@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import List, Dict, Any
 
-from pydantic import BaseModel, PositiveInt
+from pydantic import BaseModel, PositiveInt, NonNegativeInt
 
 
 class BaseDictARC(ABC):
@@ -63,6 +63,8 @@ class Syllable(BaseModel, BaseDictARC):
     id: str
     phonemes: List[Phoneme]
     info: Dict[str, Any]
+    features: List[NonNegativeInt]
+    custom_features: List[List[str]]
 
     def __str__(self):
         return self.id
@@ -75,6 +77,7 @@ class Word(BaseModel, BaseDictARC):
     id: str
     syllables: List[Syllable]
     info: Dict[str, Any]
+    features: List[List[NonNegativeInt]]
 
     def __str__(self):
         return self.id
