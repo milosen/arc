@@ -22,28 +22,6 @@ from arc.phonecodes import phonecodes
 from arc.types import *
 
 
-@maybe_load_from_file(path=os.path.join(RESULTS_DEFAULT_PATH, 'random_streams_indexes.pickle'), force_redo=False)
-def generate_stream_randomization():
-    print("GENERATE PSEUDO-RANDOM STREAMS OF SYLLABLES CONTROLLING FOR TPs")
-    TP_struct_V = []
-    for _ in tqdm(range(N_RANDOMIZATIONS_PER_STREAM)):
-        while True:
-            v_struct, m_struct = pseudo_rand_TP_struct()
-            if v_struct not in TP_struct_V:
-                TP_struct_V.append(v_struct)
-                break
-
-    TP_random_V = []
-    for _ in tqdm(range(N_RANDOMIZATIONS_PER_STREAM)):
-        while True:
-            v_random, m_struct = pseudo_rand_TP_random()
-            if v_random not in TP_random_V:
-                TP_random_V.append(v_random)
-                break
-
-    return TP_struct_V, TP_random_V
-
-
 if __name__ == '__main__':
     feature_syllables = read_feature_syllables("cV", return_as_dict=True)
 

@@ -5,17 +5,20 @@ from arc.types import *
 # lexica[words[syllables[phonemes]]]
 example_word = {
     "id": "ka:fu:ry:",
+    "features": [],
     "info": {},
     "syllables": [
         {
             "id": "ka:",
+            "features": [],
+            "custom_features": [],
             "info": {},
             "phonemes": [
                 {
                     "id": "k",
                     "info": {},
                     "order": [],
-                    "features": []
+                    "features": [],
                 },
                 {
                     "id": "a:",
@@ -27,6 +30,8 @@ example_word = {
         },
         {
             "id": "fu:",
+            "features": [],
+            "custom_features": [],
             "info": {},
             "phonemes": [
                 {
@@ -46,6 +51,8 @@ example_word = {
         {
             "id": "ry:",
             "info": {},
+            "features": [],
+            "custom_features": [],
             "phonemes": [
                 {
                     "id": "r",
@@ -82,6 +89,15 @@ class MyTestCase(unittest.TestCase):
             print(lex.as_dict())
         except ValidationError as e:
             print(e.errors())
+
+    def test_3(self):
+        word = Word(**example_word)
+        list_syllables = ContainerARC()
+        for syll in word:
+            list_syllables.append(syll)
+
+        print(list_syllables)
+        print('fu:' in list_syllables)
 
 
 if __name__ == '__main__':

@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+from collections import OrderedDict
 from dataclasses import dataclass
 from typing import List, Dict, Any
 
@@ -35,12 +36,30 @@ class BaseDictARC(ABC):
     def __getitem__(self, item):
         return self.decompose()[item]
 
+    def __iter__(self):
+        return iter(self.decompose())
+
     @abstractmethod
     def decompose(self):
         pass
 
 
-class Phoneme(BaseModel, BaseDictARC):
+class ContainerARC(OrderedDict):
+    def __contains__(self, item):
+        return item in self.keys()
+
+    def __iter__(self):
+        return iter(self.values())
+
+    def append(self, obj: BaseDictARC):
+        self[str(obj)] = obj
+
+    def __str__(self):
+        list_str = [value.id for value in self.values()]
+        return str(list_str)
+
+
+class Phoneme(BaseDictARC, BaseModel):
     id: str
     info: Dict[str, Any]
     order: List[PositiveInt]
@@ -59,7 +78,7 @@ class Phoneme(BaseModel, BaseDictARC):
         return self.id
 
 
-class Syllable(BaseModel, BaseDictARC):
+class Syllable(BaseDictARC, BaseModel):
     id: str
     phonemes: List[Phoneme]
     info: Dict[str, Any]
@@ -73,7 +92,7 @@ class Syllable(BaseModel, BaseDictARC):
         return self.phonemes
 
 
-class Word(BaseModel, BaseDictARC):
+class Word(BaseDictARC, BaseModel):
     id: str
     syllables: List[Syllable]
     info: Dict[str, Any]
