@@ -1,53 +1,36 @@
-import csv
-import itertools
-import pickle
-import random
-from functools import reduce
-from math import comb
-from typing import Union, Any, Generator, Dict, Iterable
-
-import itertools
-import pickle
-from abc import ABC, abstractmethod
-from functools import reduce
-from typing import Union, Any, Generator, List, Tuple, Dict, Set
-
-from pydantic import BaseModel, ValidationError, PositiveInt
-from scipy import stats
-from tqdm.rich import tqdm
+import datetime
 
 from arc.definitions import *
 from arc.functional import *
-from arc.phonecodes import phonecodes
 from arc.types import *
+import logging
 
 
 if __name__ == '__main__':
+    logging.basicConfig(filename=f'arc_{datetime.datetime.now()}.log',
+                        format='%(levelname)s:%(message)s', level=logging.INFO)
+
     feature_syllables = read_feature_syllables("cV", return_as_dict=True)
 
     sylls = merge_with_corpus(feature_syllables)
 
-    freqs = [s.info["freq"] for s in sylls]
-    p_vals_uniform = stats.uniform.sf(abs(stats.zscore(np.log(freqs))))
-    sylls = [s[0] for s in filter(lambda s: s[1] > 0.05, zip(sylls, p_vals_uniform))]
+    sylls = filter_uniform_syllables(sylls)
 
     native_phonemes = read_ipa_seg_order_of_phonemes(return_as_dict=True)
-    sylls = list(filter(lambda syll: all([(phon.id in native_phonemes) for phon in syll.phonemes]), sylls))
+    sylls = list(filter_common_phoneme_syllables(sylls, native_phonemes))
 
     export_speech_synthesiser(sylls)
-
-    syllabic_features = syllabic_features_from_list(sylls)
 
     words: List[Word] = generate_words(sylls)
 
     words = filter_common_onset_words(tqdm(words), sylls, native_phonemes)
     words = list(filter_gram_stats(tqdm(list(words))))
 
-    print("EXTRACT MATRIX OF BINARY FEATURES FOR EACH TRIPLET AND COMPUTE FEATURES OVERLAP FOR EACH PAIR")
+    logging.info("EXTRACT MATRIX OF BINARY FEATURES FOR EACH TRIPLET AND COMPUTE FEATURES OVERLAP FOR EACH PAIR")
     features = [word.features for word in words]
-    print(features)
+    logging.debug("Features:", features)
 
-    print("compute word overlap matrix")
+    logging.info("compute word overlap matrix")
     # KERNELS SIMULATING A STATIONARY OSCILLATORY SIGNAL AT THE FREQUENCY OF INTEREST (LAG = 3)
     overlap = overlap_matrix(words[:200])
 
@@ -73,11 +56,11 @@ if __name__ == '__main__':
 
     if s1w:
         stream, info = s1w
-        print("Stream 1: ", "".join(syllable for syllable in stream))
-        print("Rhythmicity Indexes 1: ", info["rhythmicity_indexes"])
-        print("Found lexicon: ", lexicon_1.id, lexicon_1.info["cumulative_overlap"])
+        logging.debug("Stream 1: ", "".join(syllable for syllable in stream))
+        logging.debug("Rhythmicity Indexes 1: ", info["rhythmicity_indexes"])
+        logging.debug("Found lexicon: ", lexicon_1.id, lexicon_1.info["cumulative_overlap"])
     else:
-        print("Nothing found")
+        logging.debug("Nothing found")
 
     exit()
 
