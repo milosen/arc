@@ -21,7 +21,9 @@ setup(
         "numpy>=1.24.4",
         "scipy>=1.10.1",
         "rich>=13.5.3",
-        "tqdm>=4.66.1"
+        "tqdm>=4.66.1",
+        "pydantic>=2.5.2",
+        "pytest>=7.4.3"
     ],
     extras_require={},
     zip_safe=False,

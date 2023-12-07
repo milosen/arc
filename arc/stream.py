@@ -27,7 +27,7 @@ if __name__ == '__main__':
     words = list(filter_gram_stats(tqdm(list(words))))
 
     logging.info("EXTRACT MATRIX OF BINARY FEATURES FOR EACH TRIPLET AND COMPUTE FEATURES OVERLAP FOR EACH PAIR")
-    features = [word.features for word in words]
+    features = [word.binary_features for word in words]
     logging.debug("Features:", features)
 
     logging.info("compute word overlap matrix")
@@ -81,7 +81,7 @@ if __name__ == '__main__':
 
         s1w = None
         for stream_1_word_randomized in sample_word_randomization(lexicon_1, randomized_word_indexes):
-            s1w = check_rhythmicity(stream_1_word_randomized, oscillation_patterns, bin_feat)
+            s1w = check_rhythmicity(stream_1_word_randomized)
 
             if s1w:
                 break
@@ -91,7 +91,7 @@ if __name__ == '__main__':
 
         s2w = None
         for stream_2_word_randomized in sample_word_randomization(lexicon_2, randomized_word_indexes):
-            s2w = check_rhythmicity(stream_2_word_randomized, oscillation_patterns, bin_feat)
+            s2w = check_rhythmicity(stream_2_word_randomized)
 
             if s2w:
                 break

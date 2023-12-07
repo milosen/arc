@@ -5,66 +5,66 @@ from arc.types import *
 # lexica[words[syllables[phonemes]]]
 example_word = {
     "id": "ka:fu:ry:",
-    "features": [],
+    "binary_features": [],
     "info": {},
     "syllables": [
         {
             "id": "ka:",
-            "features": [],
-            "custom_features": [],
+            "binary_features": [],
+            "phonotactic_features": [],
             "info": {},
             "phonemes": [
                 {
                     "id": "k",
                     "info": {},
                     "order": [],
-                    "features": [],
+                    "binary_features": [],
                 },
                 {
                     "id": "a:",
                     "info": {},
                     "order": [],
-                    "features": []
+                    "binary_features": []
                 }
             ]
         },
         {
             "id": "fu:",
-            "features": [],
-            "custom_features": [],
+            "binary_features": [],
+            "phonotactic_features": [],
             "info": {},
             "phonemes": [
                 {
                     "id": "f",
                     "info": {},
                     "order": [],
-                    "features": []
+                    "binary_features": []
                 },
                 {
                     "id": "u:",
                     "info": {},
                     "order": [],
-                    "features": []
+                    "binary_features": []
                 }
             ]
         },
         {
             "id": "ry:",
             "info": {},
-            "features": [],
-            "custom_features": [],
+            "binary_features": [],
+            "phonotactic_features": [],
             "phonemes": [
                 {
                     "id": "r",
                     "info": {},
                     "order": [],
-                    "features": []
+                    "binary_features": []
                 },
                 {
                     "id": "y:",
                     "info": {},
                     "order": [],
-                    "features": []
+                    "binary_features": []
                 }
             ]
         },
@@ -92,7 +92,7 @@ class MyTestCase(unittest.TestCase):
 
     def test_3(self):
         word = Word(**example_word)
-        list_syllables = ContainerARC()
+        list_syllables = CollectionARC()
         for syll in word:
             list_syllables.append(syll)
 

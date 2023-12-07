@@ -160,7 +160,7 @@ def pseudo_rand_tp_struct(n_words=4, n_sylls_per_word=3):
 def compute_rhythmicity_index_sylls_stream(stream, patterns):
     count_patterns = []
     patterns = [tuple(pat) for pat in patterns]
-    for feature_stream in list(zip(*[syllable.features for syllable in stream])):
+    for feature_stream in list(zip(*[syllable.binary_features for syllable in stream])):
         c = 0
         for iSyll in range(len(feature_stream) - max(len(i) for i in patterns)):
             if any(i == feature_stream[iSyll: iSyll + len(i)] for i in patterns):
@@ -183,7 +183,7 @@ def overlap_matrix(words: List[Word]):
 
     overlap = np.zeros([n_words, n_words])
     for i1, i2 in tqdm(list(itertools.product(range(n_words), range(n_words)))):
-        word_pair_features = [f1 + f2 for f1, f2 in zip(words[i1].features, words[i2].features)]
+        word_pair_features = [f1 + f2 for f1, f2 in zip(words[i1].binary_features, words[i2].binary_features)]
 
         matches = 0
         for word_pair_feature in word_pair_features:
@@ -230,7 +230,6 @@ def read_ipa_seg_order_of_phonemes(
 def read_phoneme_features(
         binary_features_path: str = BINARY_FEATURES_DEFAULT_PATH,
         return_as_dict: bool = False,
-
 ) -> Union[Iterable[Phoneme], Dict[str, Phoneme]]:
     logging.info("READ MATRIX OF BINARY FEATURES FOR ALL IPA PHONEMES")
 
@@ -448,7 +447,7 @@ def maybe_load_from_file(path, force_redo: bool = False):
 
 
 def check_syll_feature_overlap(syllables):
-    all_feats = [feat for syll in syllables for phon_feats in syll.custom_features for feat in phon_feats]
+    all_feats = [feat for syll in syllables for phon_feats in syll.phonotactic_features for feat in phon_feats]
     return len(all_feats) == len(set(all_feats))
 
 
@@ -474,7 +473,7 @@ def generate_words(syllables, n_sylls=3, n_look_back=2, max_tries=10_000) -> Lis
 
         if len(sylls) == n_sylls:
             word_id = "".join(s.id for s in sylls)
-            word_features = list(zip(*[s.features for s in sylls]))
+            word_features = list(zip(*[s.binary_features for s in sylls]))
 
             if word_id not in words:
                 words[word_id] = Word(id=word_id, info={}, syllables=sylls, features=word_features)
@@ -678,7 +677,7 @@ def check_rhythmicity(stream: Union[List[Word], List[Syllable]], max_ri=0.1):
 
 def merge_with_corpus(feature_syllables, syllables_corpus_path: str = SYLLABLES_DEFAULT_PATH):
     """
-    Select syllables from the given corpus and add the features from the feature syllables
+    Select syllables from the given corpus and add the binary_features from the feature syllables
     :param feature_syllables:
     :param syllables_corpus_path:
     :return:
@@ -696,7 +695,7 @@ def merge_with_corpus(feature_syllables, syllables_corpus_path: str = SYLLABLES_
                 id=syllable.id,
                 info=syllable.info,
                 phonemes=feature_syllables[syllable.id].phonemes,
-                features=feature_syllables[syllable.id].features,
+                binary_features=feature_syllables[syllable.id].binary_features,
                 custom_features=add_custom_features(feature_syllables[syllable.id])
             ))
 

@@ -1,9 +1,13 @@
+import logging
+import random
 from abc import ABC, abstractmethod
 from collections import OrderedDict
 from dataclasses import dataclass
-from typing import List, Dict, Any
+from typing import List, Dict, Any, NewType
 
 from pydantic import BaseModel, PositiveInt, NonNegativeInt
+
+from arc.definitions import PHONEME_FEATURE_LABELS
 
 
 class BaseDictARC(ABC):
@@ -44,19 +48,37 @@ class BaseDictARC(ABC):
         pass
 
 
-class ContainerARC(OrderedDict):
+class CollectionARC(OrderedDict):
     def __contains__(self, item):
         return item in self.keys()
 
     def __iter__(self):
         return iter(self.values())
 
+    def __getitem__(self, item):
+        if isinstance(item, (int, slice)):
+            return list(self.values())[item]
+        return super().__getitem__(item)
+
     def append(self, obj: BaseDictARC):
         self[str(obj)] = obj
 
     def __str__(self):
-        list_str = [value.id for value in self.values()]
-        return str(list_str)
+        li = list(self.keys())
+        return "|".join(li[:10]) + "|..." + f" ({len(li)} elements total)"
+
+    def sample(self, n):
+        if n >= len(self):
+            logging.warning("Sampling more or equal then the collection size just gives you back the collection itself"
+                            "because the elements are unique.")
+            return self
+
+        keys = set()
+
+        for _ in range(n):
+            keys.add(random.choice(list(self.keys() - keys)))
+
+        return CollectionARC({key: self[key] for key in keys})
 
 
 class Phoneme(BaseDictARC, BaseModel):
@@ -77,13 +99,16 @@ class Phoneme(BaseDictARC, BaseModel):
     def as_dict(self):
         return self.id
 
+    def get_feature(self, label):
+        return self.features[PHONEME_FEATURE_LABELS.index(label)]
+
 
 class Syllable(BaseDictARC, BaseModel):
     id: str
     phonemes: List[Phoneme]
     info: Dict[str, Any]
-    features: List[NonNegativeInt]
-    custom_features: List[List[str]]
+    binary_features: List[NonNegativeInt]
+    phonotactic_features: List[List[str]]
 
     def __str__(self):
         return self.id
@@ -96,7 +121,7 @@ class Word(BaseDictARC, BaseModel):
     id: str
     syllables: List[Syllable]
     info: Dict[str, Any]
-    features: List[List[NonNegativeInt]]
+    binary_features: List[List[NonNegativeInt]]
 
     def __str__(self):
         return self.id
@@ -117,35 +142,8 @@ class Lexicon(BaseModel, BaseDictARC):
         return self.words
 
 
-@dataclass
-class BinaryFeatures:
-    labels: List[str]
-    labels_c: List[str]
-    labels_v: List[str]
-    phons: List[str]
-    numbs: List[str]
-    consonants: List[str]
-    long_vowels: List[str]
-    n_features: int
-
-    def print_value(self, value):
-        s = ""
-        if isinstance(value, list):
-            s += "["
-            for v in value[:3]:
-                s += str(self.print_value(v))
-                s += ", "
-            s += "...]"
-        else:
-            s += str(value)
-        return s
-
-    def __str__(self):
-        s = ""
-        for key, value in self.__dict__.items():
-            s += key
-            s += ": "
-            s += self.print_value(value)
-            s += ", "
-        s = s[:-2]
-        return f"BinaryFeatures({s})"
+WordType = NewType("WordType", Word)
+LexiconType = NewType("LexiconType", Lexicon)
+SyllableType = NewType("SyllableType", Syllable)
+PhonemeType = NewType("PhonemeType", Phoneme)
+CollectionARCType = NewType("CollectionARCType", CollectionARC)
