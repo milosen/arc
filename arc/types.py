@@ -1,13 +1,20 @@
+import json
 import logging
+import os
 import random
 from abc import ABC, abstractmethod
 from collections import OrderedDict
 from dataclasses import dataclass
-from typing import List, Dict, Any, NewType
+from os import PathLike
+from typing import List, Dict, Any, NewType, TypeVar, Union, Type
 
 from pydantic import BaseModel, PositiveInt, NonNegativeInt
 
 from arc.definitions import PHONEME_FEATURE_LABELS
+from typing import TypeVar, Generic, Iterable
+
+T = TypeVar('T')
+S = TypeVar('S')
 
 
 class BaseDictARC(ABC):
@@ -46,39 +53,6 @@ class BaseDictARC(ABC):
     @abstractmethod
     def decompose(self):
         pass
-
-
-class CollectionARC(OrderedDict):
-    def __contains__(self, item):
-        return item in self.keys()
-
-    def __iter__(self):
-        return iter(self.values())
-
-    def __getitem__(self, item):
-        if isinstance(item, (int, slice)):
-            return list(self.values())[item]
-        return super().__getitem__(item)
-
-    def append(self, obj: BaseDictARC):
-        self[str(obj)] = obj
-
-    def __str__(self):
-        li = list(self.keys())
-        return "|".join(li[:10]) + "|..." + f" ({len(li)} elements total)"
-
-    def sample(self, n):
-        if n >= len(self):
-            logging.warning("Sampling more or equal then the collection size just gives you back the collection itself"
-                            "because the elements are unique.")
-            return self
-
-        keys = set()
-
-        for _ in range(n):
-            keys.add(random.choice(list(self.keys() - keys)))
-
-        return CollectionARC({key: self[key] for key in keys})
 
 
 class Phoneme(BaseDictARC, BaseModel):
@@ -142,8 +116,50 @@ class Lexicon(BaseModel, BaseDictARC):
         return self.words
 
 
-WordType = NewType("WordType", Word)
-LexiconType = NewType("LexiconType", Lexicon)
-SyllableType = NewType("SyllableType", Syllable)
-PhonemeType = NewType("PhonemeType", Phoneme)
-CollectionARCType = NewType("CollectionARCType", CollectionARC)
+class CollectionARC(OrderedDict, Generic[S, T]):
+    def __contains__(self, item):
+        return item in self.keys()
+
+    def __iter__(self):
+        return iter(self.values())
+
+    def __getitem__(self, item):
+        if isinstance(item, (int, slice)):
+            return list(self.values())[item]
+        return super().__getitem__(item)
+
+    def append(self, obj: BaseDictARC):
+        self[str(obj)] = obj
+
+    def __str__(self):
+        li = list(self.keys())
+        return "|".join(li[:10]) + "|..." + f" ({len(li)} elements total)"
+
+    def sample(self, n):
+        if n >= len(self):
+            logging.warning("Sampling more or equal then the collection size just gives you back the collection itself"
+                            "because the elements are unique.")
+            return self
+
+        keys = set()
+
+        for _ in range(n):
+            keys.add(random.choice(list(self.keys() - keys)))
+
+        return CollectionARC({key: self[key] for key in keys})
+
+    def save(self, path: Union[str, PathLike]):
+        if isinstance(path, str) and not path.endswith(".json"):
+            path = path + ".json"
+
+        with open(path, "w") as file:
+            json.dump(self, file, default=lambda o: o.model_dump(), sort_keys=True, ensure_ascii=False)
+
+
+def from_json(path: Union[str, PathLike], arc_type: Type[BaseDictARC] = Word) -> CollectionARC[str, Any]:
+    with open(path, "r") as file:
+        d = json.load(file)
+
+    return CollectionARC({
+        k: arc_type(**v) for k, v in d.items()
+    })

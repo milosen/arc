@@ -8,7 +8,7 @@ from scipy import stats
 from arc.definitions import *
 from arc.functional import add_custom_features
 from arc.io import read_syllables_corpus, read_ipa_seg_order_of_phonemes, read_bigrams, read_trigrams
-from arc.types import Syllable, Phoneme, Word, CollectionARC, CollectionARCType
+from arc.types import Syllable, Phoneme, Word, CollectionARC
 
 
 def filter_uniform_syllables(syllables: CollectionARC[str, Syllable]):

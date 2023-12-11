@@ -10,33 +10,7 @@ if __name__ == '__main__':
     logging.basicConfig(filename=f'arc_{datetime.datetime.now()}.log',
                         format='%(levelname)s:%(message)s', level=logging.INFO)
 
-    feature_syllables = read_feature_syllables("cV", return_as_dict=True)
-
-    sylls = merge_with_corpus(feature_syllables)
-
-    sylls = filter_uniform_syllables(sylls)
-
-    native_phonemes = read_ipa_seg_order_of_phonemes(return_as_dict=True)
-    sylls = list(filter_common_phoneme_syllables(sylls, native_phonemes))
-
-    export_speech_synthesiser(sylls)
-
-    words: List[Word] = generate_words(sylls)
-
-    words = filter_common_onset_words(tqdm(words), sylls, native_phonemes)
-    words = list(filter_gram_stats(tqdm(list(words))))
-
-    logging.info("EXTRACT MATRIX OF BINARY FEATURES FOR EACH TRIPLET AND COMPUTE FEATURES OVERLAP FOR EACH PAIR")
-    features = [word.binary_features for word in words]
-    logging.debug("Features:", features)
-
-    logging.info("compute word overlap matrix")
-    # KERNELS SIMULATING A STATIONARY OSCILLATORY SIGNAL AT THE FREQUENCY OF INTEREST (LAG = 3)
-    overlap = overlap_matrix(words[:200])
-
     randomized_word_indexes, randomized_syllable_indexes = generate_stream_randomization()
-
-    lexicon_generator_1 = sample_min_overlap_lexicon(words, overlap, n_words=4, max_overlap=1, max_yields=1000)
 
     s1w = None
     for lexicon_1 in lexicon_generator_1:

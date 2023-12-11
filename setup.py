@@ -16,7 +16,6 @@ setup(
     long_description=long_description,
     long_description_content_type='text/markdown',
     packages=find_packages(),
-    package_data={},
     install_requires=[
         "numpy>=1.24.4",
         "scipy>=1.10.1",
@@ -26,5 +25,6 @@ setup(
         "pytest>=7.4.3"
     ],
     extras_require={},
-    zip_safe=False,
+    include_package_data=True,
+    package_data={'': ['data/*']},
 )

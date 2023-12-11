@@ -2,7 +2,7 @@ import csv
 import logging
 import os
 import pickle
-from typing import Iterable, Dict, Union
+from typing import Iterable, Dict, Union, List
 
 import numpy as np
 from scipy import stats
@@ -10,7 +10,7 @@ from tqdm.rich import tqdm
 
 from arc.definitions import *
 from arc.phonecodes import phonecodes
-from arc.types import Syllable, Phoneme, CollectionARC
+from arc.types import Syllable, Phoneme, CollectionARC, Word
 
 
 def export_speech_synthesiser(syllables: Iterable[Syllable]):
@@ -204,3 +204,51 @@ def read_phonemes(binary_features_path: str = PHONEMES_DEFAULT_PATH) -> Collecti
 
     return CollectionARC(phonemes_collection)
 
+
+def maybe_load_from_file(path, force_redo: bool = False):
+    def _outer_wrapper(wrapped_function):
+        def _wrapper(*args, **kwargs):
+            if not os.path.exists(path) or force_redo:
+                logging.info("NO DATA FOUND, RUNNING AGAIN.")
+                data = wrapped_function(*args, **kwargs)
+
+                with open(path, 'wb') as f:
+                    pickle.dump(data, f, pickle.HIGHEST_PROTOCOL)
+
+            else:
+                logging.info("SKIPPING GENERATION. LOADING DATA FROM FILE.")
+                with open(path, 'rb') as f:
+                    data = pickle.load(f)
+
+            return data
+        return _wrapper
+    return _outer_wrapper
+
+
+def check_german(words: List[Word]):
+    # TODO
+    # SAVE WORDS IN ONE CSV FILE
+    with open(os.path.join(RESULTS_DEFAULT_PATH, 'words.csv'), 'w') as f:
+        writer = csv.writer(f)
+        for word in words:
+            writer.writerows([[word.id, 0]])
+
+    # TO ENSURE THAT THE TRIPLETS CANNOT BE MISTAKEN FOR GERMAN WORDS,
+    # WE INSTRUCTED A NATIVE GERMAN SPEAKER TO MARK EACH TRIPLET AS...
+    #     '1' IF IT CORRESPONDS EXACTLY TO A GERMAN WORD
+    #     '2' IF IT COULD BE MISTAKEN FOR A GERMAN WORD-GROUP WHEN PRONOUNCED ALOUD
+    #     '3' IF THE PRONUNCIATION OF THE FIRST TWO SYLLABLES IS A WORD CANDIDATE,
+    #         i.e. the syllable pair could be mistaken for a German word, or
+    #         it evokes a strong prediction for a certain real German word
+    #     '4' IF IT DOES NOT SOUND GERMAN AT ALL
+    #         (that is, if the phoneme combination is illegal in German morphology
+    #         [do not flag if rule exceptions exist])
+    #     '0' OTHERWISE (that is, the item is good)
+
+    logging.info("LOAD WORDS FROM CSV FILE AND SELECT THOSE THAT CANNOT BE MISTAKEN FOR GERMAN WORDS")
+    with open(os.path.join(RESULTS_DEFAULT_PATH, "words.csv"), 'r') as f:
+        fdata = list(csv.reader(f, delimiter='\t'))
+    rows = [row[0].split(",") for row in fdata]
+    words = [row[0] for row in rows if row[1] == "0"]
+
+    return words

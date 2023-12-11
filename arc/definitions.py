@@ -1,10 +1,10 @@
 import os
 
 
-CORPUS_DEFAULT_PATH = os.path.join('resources', 'example_corpus')
+CORPUS_DEFAULT_PATH = os.path.join('data', 'example_corpus')
 RESULTS_DEFAULT_PATH = "arc_results"
 
-SYLLABLES_DEFAULT_PATH = os.path.join("resources", 'syll.txt')
+SYLLABLES_DEFAULT_PATH = os.path.join("data", 'syll.txt')
 BINARY_FEATURES_DEFAULT_PATH = os.path.join(RESULTS_DEFAULT_PATH, 'phonemes.csv')
 PHONEMES_DEFAULT_PATH = os.path.join(RESULTS_DEFAULT_PATH, 'phonemes.json')
 IPA_BIGRAMS_DEFAULT_PATH = os.path.join(CORPUS_DEFAULT_PATH, 'ipa_bigrams_german.csv')
