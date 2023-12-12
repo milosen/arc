@@ -1,7 +1,7 @@
 import csv
 import logging
-import os
 import pickle
+from os import PathLike
 from typing import Iterable, Dict, Union, List
 
 import numpy as np
@@ -13,9 +13,9 @@ from arc.phonecodes import phonecodes
 from arc.types import Syllable, Phoneme, CollectionARC, Word
 
 
-def export_speech_synthesiser(syllables: Iterable[Syllable]):
+def export_speech_synthesiser(syllables: Iterable[Syllable],
+                              syllables_dir: Union[str, PathLike] = SSML_RESULTS_DEFAULT_PATH):
     logging.info("SAVE EACH SYLLABLE TO A TEXT FILE FOR THE SPEECH SYNTHESIZER")
-    syllables_dir = os.path.join(RESULTS_DEFAULT_PATH, "syllables")
     os.makedirs(syllables_dir, exist_ok=True)
     c = [s.id[0] for s in syllables]
     v = [s.id[1] for s in syllables]
@@ -203,26 +203,6 @@ def read_phonemes(binary_features_path: str = PHONEMES_DEFAULT_PATH) -> Collecti
             del phonemes_collection[key]
 
     return CollectionARC(phonemes_collection)
-
-
-def maybe_load_from_file(path, force_redo: bool = False):
-    def _outer_wrapper(wrapped_function):
-        def _wrapper(*args, **kwargs):
-            if not os.path.exists(path) or force_redo:
-                logging.info("NO DATA FOUND, RUNNING AGAIN.")
-                data = wrapped_function(*args, **kwargs)
-
-                with open(path, 'wb') as f:
-                    pickle.dump(data, f, pickle.HIGHEST_PROTOCOL)
-
-            else:
-                logging.info("SKIPPING GENERATION. LOADING DATA FROM FILE.")
-                with open(path, 'rb') as f:
-                    data = pickle.load(f)
-
-            return data
-        return _wrapper
-    return _outer_wrapper
 
 
 def check_german(words: List[Word]):

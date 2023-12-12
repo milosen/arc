@@ -1,15 +1,23 @@
 import os
+import pathlib
+from importlib import resources as importlib_resources
 
 
-CORPUS_DEFAULT_PATH = os.path.join('data', 'example_corpus')
-RESULTS_DEFAULT_PATH = "arc_results"
+def get_data_path(fname):
+    return importlib_resources.files("arc") / "data" / fname
 
-SYLLABLES_DEFAULT_PATH = os.path.join("data", 'syll.txt')
-BINARY_FEATURES_DEFAULT_PATH = os.path.join(RESULTS_DEFAULT_PATH, 'phonemes.csv')
-PHONEMES_DEFAULT_PATH = os.path.join(RESULTS_DEFAULT_PATH, 'phonemes.json')
-IPA_BIGRAMS_DEFAULT_PATH = os.path.join(CORPUS_DEFAULT_PATH, 'ipa_bigrams_german.csv')
-IPA_TRIGRAMS_DEFAULT_PATH = os.path.join(CORPUS_DEFAULT_PATH, 'ipa_trigrams_german.csv')
-IPA_SEG_DEFAULT_PATH = os.path.join(CORPUS_DEFAULT_PATH, 'german_IPA_seg.csv')
+
+BINARY_FEATURES_DEFAULT_PATH = get_data_path("phonemes.csv")
+PHONEMES_DEFAULT_PATH = get_data_path("phonemes.json")
+
+CORPUS_DEFAULT_PATH = get_data_path("example_corpus")
+SYLLABLES_DEFAULT_PATH = CORPUS_DEFAULT_PATH / 'syll.txt'
+IPA_BIGRAMS_DEFAULT_PATH = CORPUS_DEFAULT_PATH / 'ipa_bigrams_german.csv'
+IPA_TRIGRAMS_DEFAULT_PATH = CORPUS_DEFAULT_PATH / 'ipa_trigrams_german.csv'
+IPA_SEG_DEFAULT_PATH = CORPUS_DEFAULT_PATH / 'german_IPA_seg.csv'
+
+RESULTS_DEFAULT_PATH = pathlib.Path("arc_results")
+SSML_RESULTS_DEFAULT_PATH = RESULTS_DEFAULT_PATH / "syllables"
 
 PHONEME_FEATURE_LABELS = ["syl", "son", "cons", "cont", "delrel", "lat", "nas", "strid", "voi", "sg", "cg", "ant", "cor",
                           "distr", "lab", "hi", "lo", "back", "round", "tense", "long"]

@@ -1,3 +1,4 @@
+import collections
 import itertools
 import logging
 import math
@@ -155,7 +156,7 @@ def get_oscillation_patterns(lag):
     return [list(np.roll(kernel, i)) for i in range(lag)]
 
 
-def word_overlap_matrix(words: List[Word]):
+def word_overlap_matrix(words: CollectionARC[str, Word]):
     n_words = len(words)
     n_sylls_per_word = len(words[0].syllables)
 
@@ -183,9 +184,9 @@ def sample_min_overlap_lexicon(words, overlap, n_words=6, max_overlap=1, max_yie
     logging.info(f"GENERATE MIN OVERLAP LEXICONS WITH OPTIONS {options}")
     yields = 0
 
-    for max_pair_overlap, max_overlap_with_n_words in itertools.product(range(max_overlap + 1), range(1, math.comb(n_words, 2))):
+    for max_pair_overlap, max_words_with_overlap in itertools.product(range(max_overlap + 1), range(1, math.comb(n_words, 2))):
 
-        max_cum_overlap = max_pair_overlap*max_overlap_with_n_words
+        max_cum_overlap = max_pair_overlap * max_words_with_overlap
 
         if max_pair_overlap != 0:
             logging.warning(f"Increasing allowed overlaps: MAX_PAIRWISE_OVERLAP={max_pair_overlap}, MAX_CUM_OVERLAP={max_cum_overlap}")
@@ -235,6 +236,7 @@ def sample_min_overlap_lexicon(words, overlap, n_words=6, max_overlap=1, max_yie
 
                                 if yields == max_yields:
                                     return
+
 
 def make_lexicon_generator(
         words: CollectionARC[str, Word],

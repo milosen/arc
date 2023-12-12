@@ -18,26 +18,6 @@ def filter_uniform_syllables(syllables: CollectionARC[str, Syllable]):
     return CollectionARC({k: v for i, (k, v) in enumerate(syllables.items()) if p_vals_uniform[i] > 0.05})
 
 
-def check_bigram_stats(word: Word, valid_bigrams: CollectionARC[str, Syllable]):
-    phonemes = [phon for syll in word.syllables for phon in syll.phonemes]
-
-    for phon_1, phon_2 in zip(phonemes[:-1], phonemes[1:]):
-        if "".join([phon_1.id, phon_2.id]) not in valid_bigrams:
-            return False
-
-    return True
-
-
-def check_trigram_stats(word: Word, valid_trigrams: CollectionARC[str, Syllable]):
-    phonemes = [phon for syll in word.syllables for phon in syll.phonemes]
-
-    for phon_1, phon_2, phon_3 in zip(phonemes[:-2], phonemes[1:-1], phonemes[2:]):
-        if "".join([phon_1.id, phon_2.id, phon_3.id]) not in valid_trigrams:
-            return False
-
-    return True
-
-
 def filter_with_corpus(
         syllables: CollectionARC[str, Syllable],
         syllable_corpus: Union[PathLike, str, CollectionARC[str, Syllable]] = SYLLABLES_DEFAULT_PATH
@@ -61,7 +41,7 @@ def filter_with_corpus(
     return intersection
 
 
-def filter_common_phoneme_syllables(syllables, ipa_seg_path: IPA_SEG_DEFAULT_PATH):
+def filter_common_phoneme_syllables(syllables, ipa_seg_path: Union[str, PathLike] = IPA_SEG_DEFAULT_PATH):
     logging.info("FILTER SYLLABLES WITH COMMON/NATIVE PHONEMES")
     native_phonemes = read_ipa_seg_order_of_phonemes(ipa_seg_path=ipa_seg_path)
 
@@ -71,7 +51,7 @@ def filter_common_phoneme_syllables(syllables, ipa_seg_path: IPA_SEG_DEFAULT_PAT
 
 
 def get_rare_onset_phonemes(syllables: Iterable[Syllable], phonemes: Dict[str, Phoneme],
-                               p_threshold: float = 0.05):
+                            p_threshold: float = 0.05):
     logging.info("FIND SYLLABLES THAT ARE RARE AT THE ONSET OF A WORD")
 
     rare_onset_phonemes = []
@@ -87,10 +67,11 @@ def get_rare_onset_phonemes(syllables: Iterable[Syllable], phonemes: Dict[str, P
     return rare_onset_phonemes
 
 
-def filter_common_onset_words(words, ipa_seg_path: IPA_SEG_DEFAULT_PATH):
+def filter_common_onset_words(words, ipa_seg_path: Union[str, PathLike] = IPA_SEG_DEFAULT_PATH):
     logging.info("EXCLUDE WORDS WITH LOW ONSET SYLLABLE PROBABILITY")
     native_phonemes = read_ipa_seg_order_of_phonemes(ipa_seg_path=ipa_seg_path)
     list_syllables = [syllable for word in words for syllable in word]
+
     rare_phonemes = get_rare_onset_phonemes(list_syllables, native_phonemes)
     logging.info("Rare onset phonemes:", [p.id for p in rare_phonemes])
 
@@ -100,35 +81,52 @@ def filter_common_onset_words(words, ipa_seg_path: IPA_SEG_DEFAULT_PATH):
     })
 
 
-def filter_gram_stats(words: CollectionARC[str, Word], bigrams: Optional[str] = None, trigrams: Optional[str] = None,
+def check_bigram_stats(word: Word, valid_bigrams: CollectionARC[str, Syllable]):
+    phonemes = [phon for syll in word.syllables for phon in syll.phonemes]
+
+    for phon_1, phon_2 in zip(phonemes[:-1], phonemes[1:]):
+        if "".join([phon_1.id, phon_2.id]) not in valid_bigrams:
+            return False
+
+    return True
+
+
+def check_trigram_stats(word: Word, valid_trigrams: CollectionARC[str, Syllable]):
+    phonemes = [phon for syll in word.syllables for phon in syll.phonemes]
+
+    for phon_1, phon_2, phon_3 in zip(phonemes[:-2], phonemes[1:-1], phonemes[2:]):
+        if "".join([phon_1.id, phon_2.id, phon_3.id]) not in valid_trigrams:
+            return False
+
+    return True
+
+
+def filter_gram_stats(words: CollectionARC[str, Word],
+                      bigrams: Optional[Union[str, PathLike]] = IPA_BIGRAMS_DEFAULT_PATH,
+                      trigrams: Optional[Union[str, PathLike]] = IPA_TRIGRAMS_DEFAULT_PATH,
                       uniform_bigrams=False, uniform_trigrams=False) -> CollectionARC[str, Word]:
     logging.info("SELECT WORDS WITH UNIFORM BIGRAM AND NON-ZERO TRIGRAM LOG-PROBABILITY OF OCCURRENCE IN THE CORPUS")
 
     if not bigrams and not trigrams:
-        logging.info("Nothing to do. Please supply biagrams and/or trigrams path")
+        logging.info("Nothing to do. Please supply bigrams and/or trigrams path")
         return words
 
-    filtered_words = CollectionARC({
-            word.id: word for word in words
-    })
+    filtered_words = CollectionARC(**words)
     if bigrams:
         bigrams: CollectionARC[str, Syllable] = read_bigrams(bigrams)
         if uniform_bigrams:
             bigrams = CollectionARC({
                 k: v for bigram in bigrams for k, v in bigram.items() if bigram.info["p_unif"] > 0.05
             })
-        filtered_words = CollectionARC({
-            word.id: word for word in filtered_words if check_bigram_stats(word, bigrams)
-        })
+        filtered_words_dict = {word.id: word for word in filtered_words if check_bigram_stats(word, bigrams)}
+        filtered_words = CollectionARC(**filtered_words_dict)
 
     if trigrams:
         trigrams: CollectionARC[str, Syllable] = read_trigrams(trigrams)
         if uniform_trigrams:
-            trigrams = CollectionARC({
-                k: v for bigram in bigrams for k, v in bigram.items() if bigram.info["p_unif"] > 0.05
-            })
-        filtered_words = CollectionARC({
-            word.id: word for word in filtered_words if check_trigram_stats(word, trigrams)
-        })
+            trigrams_dict = {k: v for bigram in bigrams for k, v in bigram.items() if bigram.info["p_unif"] > 0.05}
+            trigrams = CollectionARC(**trigrams_dict)
+        filtered_words_dict = {word.id: word for word in filtered_words if check_trigram_stats(word, trigrams)}
+        filtered_words = CollectionARC(**filtered_words_dict)
 
     return filtered_words

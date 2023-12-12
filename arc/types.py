@@ -10,7 +10,7 @@ from typing import List, Dict, Any, NewType, TypeVar, Union, Type
 
 from pydantic import BaseModel, PositiveInt, NonNegativeInt
 
-from arc.definitions import PHONEME_FEATURE_LABELS
+from arc.definitions import PHONEME_FEATURE_LABELS, RESULTS_DEFAULT_PATH
 from typing import TypeVar, Generic, Iterable
 
 T = TypeVar('T')
@@ -148,7 +148,10 @@ class CollectionARC(OrderedDict, Generic[S, T]):
 
         return CollectionARC({key: self[key] for key in keys})
 
-    def save(self, path: Union[str, PathLike]):
+    def save(self, path: Union[str, PathLike] = None):
+        if path is None:
+            path = RESULTS_DEFAULT_PATH / f"arc_{self[0].__class__.__name__}s.json"
+
         if isinstance(path, str) and not path.endswith(".json"):
             path = path + ".json"
 
@@ -156,10 +159,8 @@ class CollectionARC(OrderedDict, Generic[S, T]):
             json.dump(self, file, default=lambda o: o.model_dump(), sort_keys=True, ensure_ascii=False)
 
 
-def from_json(path: Union[str, PathLike], arc_type: Type[BaseDictARC] = Word) -> CollectionARC[str, Any]:
+def from_json(path: Union[str, PathLike], arc_type: Type = T) -> CollectionARC[str, T]:
     with open(path, "r") as file:
         d = json.load(file)
 
-    return CollectionARC({
-        k: arc_type(**v) for k, v in d.items()
-    })
+    return CollectionARC({k: arc_type(**v) for k, v in d.items()})
