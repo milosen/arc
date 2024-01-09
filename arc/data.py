@@ -10,49 +10,14 @@ import numpy as np
 from tqdm.rich import tqdm
 
 from arc.definitions import *
-from arc.io import read_phoneme_features, maybe_load_from_file
-from arc.types import Word, Syllable, CollectionARC, Lexicon
+from arc.io import maybe_load_from_file
+from arc.types import Word, Syllable, Register, Lexicon, Phoneme
 
 
-def check_syll_feature_overlap(syllables):
-    all_feats = [feat for syll in syllables for phon_feats in syll.phonotactic_features for feat in phon_feats]
-    return len(all_feats) == len(set(all_feats))
-
-
-def generate_subset_syllables(syllables, lookback_syllables):
-    subset = []
-    for new_syll in syllables:
-        syll_test_set = lookback_syllables + [new_syll]
-        if check_syll_feature_overlap(syll_test_set):
-            subset.append(new_syll)
-
-    return subset
-
-
-def make_words(syllables, n_sylls=3, n_look_back=2, max_tries=10_000) -> CollectionARC:
-    words = {}
-    for _ in tqdm(range(max_tries)):
-        sylls = []
-        for _ in range(n_sylls):
-            sub = generate_subset_syllables(syllables, sylls[-n_look_back:])
-            if sub:
-                syll = random.sample(sub, 1)[0]
-                sylls.append(syll)
-
-        if len(sylls) == n_sylls:
-            word_id = "".join(s.id for s in sylls)
-            word_features = list(zip(*[s.binary_features for s in sylls]))
-
-            if word_id not in words:
-                words[word_id] = Word(id=word_id, info={}, syllables=sylls, binary_features=word_features)
-
-    return CollectionARC(words)
-
-
-def add_phonotactic_features(syllable: Syllable):
-    syll_feats = [[] for _ in syllable.phonemes]
-    for i, phon in enumerate(syllable.phonemes):
-        phon_feats = phon.features
+def add_phonotactic_features(syllable_phonemes: List[Phoneme]):
+    syll_feats = [[] for _ in syllable_phonemes]
+    for i, phon in enumerate(syllable_phonemes):
+        phon_feats = phon.info["features"]
         is_consonant = phon_feats[PHONEME_FEATURE_LABELS.index("cons")] == "+"
         if is_consonant:
             if phon_feats[SON] == '+':
@@ -72,16 +37,14 @@ def add_phonotactic_features(syllable: Syllable):
                 if vowel in phon.id:
                     syll_feats[i].append(vowel)
 
-    syllable.phonotactic_features = syll_feats
-
-    return syllable
+    return syll_feats
 
 
 def make_feature_syllables(
-    phonemes: CollectionARC,
+    phonemes: Register,
     phoneme_pattern: Union[str, list] = "cV",
     max_combinations: int = 1_000_000,
-) -> CollectionARC:
+) -> Register:
     """Generate syllables form feature-phonemes. Only keep syllables that follow the phoneme pattern"""
 
     logging.info("SELECT SYLLABLES WITH GIVEN PHONEME-TYPE PATTERN AND WITH PHONEMES WE HAVE FEATURES FOR")
@@ -102,14 +65,14 @@ def make_feature_syllables(
 
     single_consonants, multi_consonants, short_vowels, long_vowels = [], [], [], []
     for phoneme in phonemes.values():
-        if phoneme.features[PHONEME_FEATURE_LABELS.index('cons')] == "+":
+        if phoneme.info["features"][PHONEME_FEATURE_LABELS.index('cons')] == "+":
             if len(phoneme.id) == 1:
                 single_consonants.append(phoneme.id)
             else:
                 multi_consonants.append(phoneme.id)
         else:
             if len(phoneme.id) == 2:
-                if phoneme.features[PHONEME_FEATURE_LABELS.index('long')] == "+":
+                if phoneme.info["features"][PHONEME_FEATURE_LABELS.index('long')] == "+":
                     long_vowels.append(phoneme.id)
                 else:
                     short_vowels.append(phoneme.id)
@@ -123,7 +86,7 @@ def make_feature_syllables(
                         f"I will only generate {max_combinations} of them, but you can set this number higher with the "
                         "option 'max_combinations'.")
 
-    syllables_phoneme_comb = {}
+    syllables_dict = {}
     list_of_combinations = []
     for i, phoneme_combination in enumerate(itertools.product(*phonemes_factors)):
         if i >= max_combinations:
@@ -138,17 +101,19 @@ def make_feature_syllables(
             phoneme = phonemes[p]
             syll_phons.append(phoneme)
             for label in phoneme_feature_labels:
-                if phoneme.features[PHONEME_FEATURE_LABELS.index(label)] == "+":
+                if phoneme.info["features"][PHONEME_FEATURE_LABELS.index(label)] == "+":
                     syll_features.append(1)
                 else:
                     syll_features.append(0)
 
         syllable = Syllable(
-            id=syll_id, info={}, phonemes=syll_phons, binary_features=syll_features, phonotactic_features=[]
+            id=syll_id, info={"binary_features": syll_features,
+                              "phonotactic_features": add_phonotactic_features(syll_phons)},
+            phonemes=syll_phons
         )
-        syllables_phoneme_comb[syll_id] = add_phonotactic_features(syllable)
+        syllables_dict[syll_id] = syllable
 
-    return CollectionARC(syllables_phoneme_comb)
+    return Register(syllables_dict)
 
 
 def get_oscillation_patterns(lag):
@@ -156,7 +121,46 @@ def get_oscillation_patterns(lag):
     return [list(np.roll(kernel, i)) for i in range(lag)]
 
 
-def word_overlap_matrix(words: CollectionARC[str, Word]):
+def check_syll_feature_overlap(syllables):
+    all_feats = [feat for syll in syllables for phon_feats in syll.info["phonotactic_features"] for feat in phon_feats]
+    return len(all_feats) == len(set(all_feats))
+
+
+def generate_subset_syllables(syllables, lookback_syllables):
+    subset = []
+    for new_syll in syllables:
+        syll_test_set = lookback_syllables + [new_syll]
+        if check_syll_feature_overlap(syll_test_set):
+            subset.append(new_syll)
+
+    return subset
+
+
+def make_words(syllables, n_sylls=3, n_look_back=2, n_words=10_000, max_tries=100_000) -> Register:
+    words = {}
+    for _ in tqdm(range(max_tries)):
+        sylls = []
+        for _ in range(n_sylls):
+            sub = generate_subset_syllables(syllables, sylls[-n_look_back:])
+            sub = list(filter(lambda x: x.id not in sylls, sub))
+            if sub:
+                syll = random.sample(sub, 1)[0]
+                sylls.append(syll)
+
+        if len(sylls) == n_sylls:
+            word_id = "".join(s.id for s in sylls)
+            if word_id not in words:
+                word_features = list(zip(*[s.info["binary_features"] for s in sylls]))
+                words[word_id] = Word(id=word_id, info={"binary_features": word_features}, syllables=sylls)
+
+        if len(words) == n_words:
+            logging.info(f"Done: Found {n_words} words.")
+            break
+
+    return Register(words)
+
+
+def word_overlap_matrix(words: Register[str, Word]):
     n_words = len(words)
     n_sylls_per_word = len(words[0].syllables)
 
@@ -164,7 +168,8 @@ def word_overlap_matrix(words: CollectionARC[str, Word]):
 
     overlap = np.zeros([n_words, n_words])
     for i1, i2 in tqdm(list(itertools.product(range(n_words), range(n_words)))):
-        word_pair_features = [f1 + f2 for f1, f2 in zip(words[i1].binary_features, words[i2].binary_features)]
+        word_pair_features = [f1 + f2 for f1, f2 in zip(words[i1].info["binary_features"],
+                                                        words[i2].info["binary_features"])]
 
         matches = 0
         for word_pair_feature in word_pair_features:
@@ -239,7 +244,7 @@ def sample_min_overlap_lexicon(words, overlap, n_words=6, max_overlap=1, max_yie
 
 
 def make_lexicon_generator(
-        words: CollectionARC[str, Word],
+        words: Register[str, Word],
         n_words: int = 6,
         max_overlap: int = 1,
         max_yields: int = 10

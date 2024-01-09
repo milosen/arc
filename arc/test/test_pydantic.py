@@ -92,7 +92,7 @@ class MyTestCase(unittest.TestCase):
 
     def test_3(self):
         word = Word(**example_word)
-        list_syllables = CollectionARC()
+        list_syllables = Register()
         for syll in word:
             list_syllables.append(syll)
 

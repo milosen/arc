@@ -26,5 +26,5 @@ setup(
     ],
     extras_require={},
     include_package_data=True,
-    package_data={'arc': ['data/*']},
+    package_data={'arc': ['data/*', 'data/example_corpus/*']},
 )

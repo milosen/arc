@@ -10,7 +10,7 @@ from tqdm.rich import tqdm
 
 from arc.definitions import *
 from arc.phonecodes import phonecodes
-from arc.types import Syllable, Phoneme, CollectionARC, Word
+from arc.types import Syllable, Phoneme, Register, Word
 
 
 def export_speech_synthesiser(syllables: Iterable[Syllable],
@@ -49,9 +49,9 @@ def maybe_load_from_file(path, force_redo: bool = False):
     return _outer_wrapper
 
 
-def read_ipa_seg_order_of_phonemes(
+def read_phoneme_corpus(
         ipa_seg_path: Union[os.PathLike, str] = IPA_SEG_DEFAULT_PATH
-) -> CollectionARC[str, Phoneme]:
+) -> Register[str, Phoneme]:
     """
     Read order of phonemes, i.e. phonemes from a corpus together with the positions at which they
     appear in a bag of words.
@@ -69,16 +69,16 @@ def read_ipa_seg_order_of_phonemes(
             phon = phon_data_split[1].replace('"', '').replace("g", "ɡ")
             position_in_word = int(phon_data_split[2])
             if phon in phonemes:
-                phonemes[phon].order.append(position_in_word)
+                phonemes[phon].info["order"].append(position_in_word)
             else:
-                phonemes[phon] = Phoneme(id=phon, order=[position_in_word], features=[], info={})
+                phonemes[phon] = Phoneme(id=phon, info={"order": [position_in_word]})
 
-    return CollectionARC(phonemes)
+    return Register(phonemes)
 
 
 def read_syllables_corpus(
         syllables_corpus_path: Union[os.PathLike, str] = SYLLABLES_DEFAULT_PATH,
-) -> CollectionARC[str, Syllable]:
+) -> Register[str, Syllable]:
     logging.info("READ SYLLABLES, FREQUENCIES AND PROBABILITIES FROM CORPUS AND CONVERT SYLLABLES TO IPA")
 
     with open(syllables_corpus_path, "r") as csv_file:
@@ -98,12 +98,12 @@ def read_syllables_corpus(
             )
             del syllables_dict[syll_ipa]
 
-    return CollectionARC(syllables_dict)
+    return Register(syllables_dict)
 
 
 def read_bigrams(
     ipa_bigrams_path: str = IPA_BIGRAMS_DEFAULT_PATH,
-) -> CollectionARC[str, Syllable]:
+) -> Register[str, Syllable]:
     logging.info("READ BIGRAMS")
 
     with open(ipa_bigrams_path, "r") as csv_file:
@@ -128,12 +128,12 @@ def read_bigrams(
             )
             del bigrams_dict[bigram]
 
-    return CollectionARC(bigrams_dict)
+    return Register(bigrams_dict)
 
 
 def read_trigrams(
         ipa_trigrams_path: str = IPA_TRIGRAMS_DEFAULT_PATH,
-) -> CollectionARC[str, Syllable]:
+) -> Register[str, Syllable]:
     logging.info("READ TRIGRAMS")
     fdata = list(csv.reader(open(ipa_trigrams_path, "r"), delimiter='\t'))
 
@@ -155,7 +155,7 @@ def read_trigrams(
             )
             del trigrams_dict[trigram]
 
-    return CollectionARC(trigrams_dict)
+    return Register(trigrams_dict)
 
 
 def read_phoneme_features(
@@ -184,25 +184,26 @@ def read_phoneme_features(
     return phonemes_dict.values()
 
 
-def read_phonemes(binary_features_path: str = PHONEMES_DEFAULT_PATH) -> CollectionARC:
+def read_phonemes_csv(binary_features_path: str = BINARY_FEATURES_DEFAULT_PATH) -> Register:
     logging.info("READ MATRIX OF BINARY FEATURES FOR ALL IPA PHONEMES")
 
-    import json
+    with open(binary_features_path, "r") as csv_file:
+        fdata = list(csv.reader(csv_file))
 
-    with open(binary_features_path, 'r') as f:
-        data = json.load(f)
+    phons = [row[0] for row in fdata[1:]]
+    feats = [row[1:] for row in fdata[1:]]
 
-    phonemes_collection = {}
-    CollectionARC({key: Phoneme(**values) for key, values in data.items()})
-    for key, values in data.items():
-        if key not in phonemes_collection or values["binary_features"] == phonemes_collection[key]["binary_features"]:
-            phonemes_collection[key] = Phoneme(**values)
+    phonemes_dict = {}
+    for phon, features in zip(phons, feats):
+        if phon not in phonemes_dict or features == phonemes_dict[phon].info["features"]:
+            phonemes_dict[phon] = Phoneme(id=phon, info={"features": features})
         else:
             logging.warning(
-                f"Dropping phoneme '{key}' with conflicting feature entries {values['binary_features']} != {phonemes_collection[key]['binary_features']}.")
-            del phonemes_collection[key]
+                f"Dropping phoneme '{phon}' with conflicting "
+                f"feature entries {features} != {phonemes_dict[phon].info['features']}.")
+            del phonemes_dict[phon]
 
-    return CollectionARC(phonemes_collection)
+    return Register(phonemes_dict)
 
 
 def check_german(words: List[Word]):

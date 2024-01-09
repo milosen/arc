@@ -5,13 +5,14 @@ from typing import Union
 from tqdm import TqdmExperimentalWarning
 
 from arc.definitions import RESULTS_DEFAULT_PATH, PHONEMES_DEFAULT_PATH
+from arc.io import read_phonemes_csv
 from arc.types import from_json, Phoneme, Syllable, Word, Lexicon
 
 warnings.filterwarnings("ignore", category=TqdmExperimentalWarning)
 
 
 def load_default_phonemes():
-    return from_json(PHONEMES_DEFAULT_PATH, Phoneme)
+    return read_phonemes_csv()
 
 
 def load_phonemes(path: Union[str, PathLike]):
