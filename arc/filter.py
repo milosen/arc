@@ -82,7 +82,7 @@ def filter_common_phoneme_words(words, position: int = 0, ipa_seg_path: Union[st
     native_phonemes = read_phoneme_corpus(ipa_seg_path=ipa_seg_path)
     list_syllables = [syllable for word in words for syllable in word]
 
-    rare_phonemes = get_rare_onset_phonemes(list_syllables, native_phonemes)
+    rare_phonemes = get_rare_phonemes(list_syllables, native_phonemes)
     logging.info("Rare onset phonemes:", [p.id for p in rare_phonemes])
 
     # e.g. word[syll_idx=0][phon_idx=0] means first phoneme in first syllable of the word

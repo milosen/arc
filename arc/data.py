@@ -4,14 +4,14 @@ import logging
 import math
 import random
 from functools import reduce
-from typing import List, Union, Dict, Generator
+from typing import List, Union, Dict, Generator, Optional, Literal, Tuple
 
 import numpy as np
 from tqdm.rich import tqdm
 
 from arc.definitions import *
 from arc.io import maybe_load_from_file
-from arc.types import Word, Syllable, Register, Lexicon, Phoneme
+from arc.types import Word, Syllable, Register, Lexicon, Phoneme, SyllableStream
 
 
 def add_phonotactic_features(syllable_phonemes: List[Phoneme]):
@@ -166,8 +166,8 @@ def word_overlap_matrix(words: Register[str, Word]):
 
     oscillation_patterns = get_oscillation_patterns(lag=n_sylls_per_word)
 
-    overlap = np.zeros([n_words, n_words])
-    for i1, i2 in tqdm(list(itertools.product(range(n_words), range(n_words)))):
+    overlap = np.zeros([n_words, n_words], dtype=int)
+    for i1, i2 in list(itertools.product(range(n_words), range(n_words))):
         word_pair_features = [f1 + f2 for f1, f2 in zip(words[i1].info["binary_features"],
                                                         words[i2].info["binary_features"])]
 
@@ -247,21 +247,30 @@ def make_lexicon_generator(
         words: Register[str, Word],
         n_words: int = 6,
         max_overlap: int = 1,
-        max_yields: int = 10
-) -> Generator[Lexicon, None, None]:
+        max_yields: int = 10) -> Generator[Lexicon, None, None]:
+
     overlap = word_overlap_matrix(words)
     options = dict((k, v) for k, v in locals().items() if not k == 'words' and not k == 'overlap')
     logging.info(f"GENERATE MIN OVERLAP LEXICONS WITH OPTIONS {options}")
     yields = 0
 
-    for max_pair_overlap, max_overlap_with_n_words in itertools.product(range(max_overlap + 1),
-                                                                        range(1, math.comb(n_words, 2))):
+    def check_no_syllable_overlap(pair):
+        w1, w2 = pair
+        intersection = set(syllable.id for syllable in words[w1]) & set(syllable.id for syllable in words[w2])
+        return not intersection
+
+    iter_allowed_overlaps = itertools.product(range(max_overlap + 1), range(1, math.comb(n_words, 2)))
+
+    for max_pair_overlap, max_overlap_with_n_words in iter_allowed_overlaps:
 
         max_cum_overlap = max_pair_overlap * max_overlap_with_n_words
 
         if max_pair_overlap != 0:
             logging.warning(
-                f"Increasing allowed overlaps: MAX_PAIRWISE_OVERLAP={max_pair_overlap}, MAX_CUM_OVERLAP={max_cum_overlap}")
+                f"Increasing allowed overlaps: "
+                f"MAX_PAIRWISE_OVERLAP={max_pair_overlap}, "
+                f"MAX_CUMULATIVE_OVERLAP={max_cum_overlap}"
+            )
 
         # WORDSxWORDS boolean matrix indicating if the words can be paired together based on the maximum overlap
         valid_word_pairs_matrix = (overlap <= max_pair_overlap)
@@ -269,48 +278,53 @@ def make_lexicon_generator(
         # represent the matrix from above as a set of pairs of word indexes, e.g. {{0, 1}, {0, 2}, ...}
         min_overlap_pairs = zip(*np.where(valid_word_pairs_matrix))
         min_overlap_pairs = set(frozenset([int(pair[0]), int(pair[1])]) for pair in min_overlap_pairs)
-
-        def check_no_syllable_overlap(pair):
-            w1, w2 = pair
-            intersection = set(syllable.id for syllable in words[w1]) & set(syllable.id for syllable in words[w2])
-            return not intersection
-
         min_overlap_pairs = set(filter(check_no_syllable_overlap, min_overlap_pairs))
 
         for start_pair in min_overlap_pairs:
-            # logging.info(f"max overlap: {max_overlap}; start with pair: {i}/{len(min_overlap_pairs)}")
+
             lexicon_indexes = set(start_pair)
-            sum_overlaps = 0
+            cumulative_overlap = 0
 
             for candidate_idx in range(len(overlap)):
-                if candidate_idx not in lexicon_indexes:
-                    has_min_overlap = [({known_idx, candidate_idx} in min_overlap_pairs) for known_idx in lexicon_indexes]
 
-                    if all(has_min_overlap):
-                        overlaps = [overlap[known_idx, candidate_idx] for known_idx in lexicon_indexes]
+                # is candidate word known?
+                if candidate_idx in lexicon_indexes:
+                    continue
 
-                        if sum(overlaps) <= (max_cum_overlap - sum_overlaps):
-                            lexicon_indexes.add(candidate_idx)
-                            sum_overlaps += sum(overlaps)
+                # does the new word exceed the allowed pairwise overlap?
+                has_min_overlap = [({known_idx, candidate_idx} in min_overlap_pairs) for known_idx in lexicon_indexes]
+                if not all(has_min_overlap):
+                    continue
 
-                            if len(lexicon_indexes) == n_words:
-                                valid_sub_matrix = valid_word_pairs_matrix[
-                                    np.ix_(list(lexicon_indexes), list(lexicon_indexes))]
-                                assert np.all(np.int32(valid_sub_matrix) == (1 - np.eye(n_words)))
-                                word_ids = []
-                                word_objects = []
-                                for index in lexicon_indexes:
-                                    word_ids.append(words[index].id)
-                                    word_objects.append(words[index])
-                                lexicon = Lexicon(id="".join(word_ids), words=word_objects,
-                                                  info={"cumulative_overlap": sum_overlaps})
+                # make sure the new word does not increase the cumulative overlap too much
+                sum_overlaps_with_known = sum([overlap[known_idx, candidate_idx] for known_idx in lexicon_indexes])
+                current_overlap_budget = (max_cum_overlap - cumulative_overlap)
+                if sum_overlaps_with_known > current_overlap_budget:
+                    continue
 
-                                yield lexicon
+                # success! let's add the new word
+                lexicon_indexes.add(candidate_idx)
+                cumulative_overlap += sum_overlaps_with_known
 
-                                yields += 1
+                # do we have to go again?
+                if len(lexicon_indexes) < n_words:
+                    continue
 
-                                if yields == max_yields:
-                                    return
+                # debugging: check we did not include invalid indexes
+                valid_sub_matrix = valid_word_pairs_matrix[
+                    np.ix_(list(lexicon_indexes), list(lexicon_indexes))
+                ]
+                assert np.all(np.int32(valid_sub_matrix) == (1 - np.eye(n_words)))
+
+                # yield lexicon (guaranteed to be the next best)
+                lexicon = Register({words[idx].id:  words[idx] for idx in lexicon_indexes})
+                lexicon.info["cumulative_overlap"] = cumulative_overlap
+                yield lexicon
+
+                yields += 1
+
+                if yields == max_yields:
+                    return
 
 
 def transitional_p_matrix(v):
@@ -325,7 +339,6 @@ def transitional_p_matrix(v):
     return M
 
 
-# GENERATE SERIES OF SYLLABLES WITH UNIFORM TPs
 def pseudo_walk_tp_random(P, T, v, S, N, n_words=4, n_sylls_per_word=3):
     # TODO
     t = []
@@ -392,7 +405,6 @@ def pseudo_rand_tp_random(n_words=4, n_sylls_per_word=3):
     return V, M
 
 
-# GENERATE RANDOMIZATIONS CONTROLLING FOR UNIFORMITY OF TRANSITION PROBABILITIES ACROSS WORDS
 def pseudo_rand_tp_struct(n_words=4, n_sylls_per_word=3):
     # TODO
     n_sylls_total = n_sylls_per_word * n_words  # number of syllables in a lexicon
@@ -453,23 +465,156 @@ def pseudo_rand_tp_struct(n_words=4, n_sylls_per_word=3):
     return v, M
 
 
-@maybe_load_from_file(path=os.path.join(RESULTS_DEFAULT_PATH, 'random_streams_indexes.pickle'), force_redo=False)
-def generate_stream_randomization():
-    logging.info("GENERATE PSEUDO-RANDOM STREAMS OF SYLLABLES CONTROLLING FOR TPs")
-    TP_struct_V = []
-    for _ in tqdm(range(N_RANDOMIZATIONS_PER_STREAM)):
-        while True:
-            v_struct, m_struct = pseudo_rand_tp_struct()
-            if v_struct not in TP_struct_V:
-                TP_struct_V.append(v_struct)
-                break
+def sample_syllable_randomization(
+        lexicon: Register[str, Word],
+        max_tries=1000,
+        rand_mode: Literal["word", "syllable"] = "word") -> List[Syllable]:
+    if rand_mode == "word":
+        elements = [word for word in lexicon]
+        rand_func = pseudo_rand_tp_struct
+    elif rand_mode == "syllable":
+        elements = [syllable for word in lexicon for syllable in word]
+        rand_func = pseudo_rand_tp_random
+    else:
+        raise ValueError(f"rand_mode '{rand_mode}' unknown.")
 
-    TP_random_V = []
-    for _ in tqdm(range(N_RANDOMIZATIONS_PER_STREAM)):
-        while True:
-            v_random, m_struct = pseudo_rand_tp_random()
-            if v_random not in TP_random_V:
-                TP_random_V.append(v_random)
-                break
+    randomized_indexes_list = []
+    n_sylls = len(lexicon[0].syllables)
+    n_words = len(lexicon)
 
-    return TP_struct_V, TP_random_V
+    for _ in range(max_tries):
+        randomized_indexes, _ = rand_func(n_words=n_words, n_sylls_per_word=n_sylls)
+        if randomized_indexes not in randomized_indexes_list:
+            randomized_indexes_list.append(randomized_indexes)
+            if rand_mode == "word":
+                yield [syll for index in randomized_indexes for syll in elements[index]]
+
+            else:
+                yield [elements[index] for index in randomized_indexes]
+
+
+def compute_rhythmicity_index_sylls_stream(stream, patterns):
+    count_patterns = []
+    patterns = [tuple(pat) for pat in patterns]
+    for feature_stream in list(zip(*[syllable.info["binary_features"] for syllable in stream])):
+        c = 0
+        for iSyll in range(len(feature_stream) - max(len(i) for i in patterns)):
+            if any(i == feature_stream[iSyll: iSyll + len(i)] for i in patterns):
+                c += 1
+        count_patterns.append(c / (len(feature_stream) - max(len(i) for i in patterns)))
+
+    return count_patterns
+
+
+def make_stream_from_lexicon(lexicon: Register[str, Word],
+                             max_rhythmicity=0.1, max_tries_randomize=10,
+                             rand_mode: Literal["word", "syllable"] = "word"):
+
+    for sylls_stream in sample_syllable_randomization(
+            lexicon,
+            max_tries=max_tries_randomize,
+            rand_mode=rand_mode
+    ):
+        patterns = get_oscillation_patterns(len(lexicon[0].syllables))
+        rhythmicity_index = compute_rhythmicity_index_sylls_stream(sylls_stream, patterns)
+
+        if max(rhythmicity_index) <= max_rhythmicity:
+            return SyllableStream(
+                id="".join([syll.id for syll in sylls_stream]),
+                syllables=sylls_stream,
+                info={
+                    "rhythmicity_indexes": rhythmicity_index,
+                    "lexicon": lexicon,
+                    "rand_mode": rand_mode,
+                }
+            )
+
+
+def make_stream_from_words(words: Register[str, Word],
+                           n_words: int = 4,
+                           max_word_overlap: int = 1,
+                           max_lexicons: int = 10,
+                           max_rhythmicity=0.1,
+                           max_tries_randomize=10,
+                           rand_mode: Literal["word", "syllable"] = "word") -> Optional[SyllableStream]:
+
+    l_gen = make_lexicon_generator(words=words,
+                                   n_words=n_words, max_overlap=max_word_overlap, max_yields=max_lexicons)
+
+    for lex in l_gen:
+        maybe_stream: Optional[SyllableStream] = make_stream_from_lexicon(
+            lex,
+            max_rhythmicity=max_rhythmicity,
+            max_tries_randomize=max_tries_randomize,
+            rand_mode=rand_mode
+        )
+
+        if maybe_stream:
+            return maybe_stream
+
+
+def make_compatible_streams(words: Register[str, Word],
+                            n_words: int = 4,
+                            max_word_overlap: int = 1,
+                            max_lexicons: int = 10,
+                            max_rhythmicity=0.1,
+                            max_tries_randomize=10) -> Optional[Tuple[SyllableStream]]:
+    logging.info("Building streams from a pair of compatible lexicons...")
+
+    lexicon_generator_1 = make_lexicon_generator(
+        words=words, n_words=n_words, max_overlap=max_word_overlap, max_yields=max_lexicons)
+    lexicon_generator_2 = make_lexicon_generator(
+        words=words, n_words=n_words, max_overlap=max_word_overlap, max_yields=max_lexicons)
+
+    # pairwise lexicon generation
+    for lexicon_1, lexicon_2 in itertools.product(lexicon_generator_1, lexicon_generator_2):
+
+        if not set(lexicon_1.keys()).intersection(set(lexicon_2.keys())):
+            logging.warning("Dropping Lexicons because they have overlapping syllables.")
+            continue
+
+        maybe_stream_1_words: Optional[SyllableStream] = make_stream_from_lexicon(
+            lexicon_1,
+            max_rhythmicity=max_rhythmicity,
+            max_tries_randomize=max_tries_randomize,
+            rand_mode="word"
+        )
+
+        if not maybe_stream_1_words:
+            logging.warning("Dropping Lexicons because no good word-randomized stream for Lexicon 1 was found.")
+            continue
+
+        maybe_stream_1_sylls: Optional[SyllableStream] = make_stream_from_lexicon(
+            lexicon_1,
+            max_rhythmicity=max_rhythmicity,
+            max_tries_randomize=max_tries_randomize,
+            rand_mode="syllable"
+        )
+
+        if not maybe_stream_1_sylls:
+            logging.warning("Dropping Lexicons because no good syllable-randomized stream for Lexicon 1 was found.")
+            continue
+
+        maybe_stream_2_words: Optional[SyllableStream] = make_stream_from_lexicon(
+            lexicon_1,
+            max_rhythmicity=max_rhythmicity,
+            max_tries_randomize=max_tries_randomize,
+            rand_mode="word"
+        )
+
+        if not maybe_stream_2_words:
+            logging.warning("Dropping Lexicons because no good syllable-randomized stream for Lexicon 1 was found.")
+            continue
+
+        maybe_stream_2_sylls: Optional[SyllableStream] = make_stream_from_lexicon(
+            lexicon_1,
+            max_rhythmicity=max_rhythmicity,
+            max_tries_randomize=max_tries_randomize,
+            rand_mode="syllable"
+        )
+
+        if not maybe_stream_2_sylls:
+            logging.warning("Dropping Lexicons because no good syllable-randomized stream for Lexicon 2 was found.")
+            continue
+
+        return maybe_stream_1_words, maybe_stream_1_sylls, maybe_stream_2_words, maybe_stream_2_sylls

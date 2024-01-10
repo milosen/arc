@@ -36,13 +36,6 @@ class Element(ABC):
     def get_elements(self):
         pass
 
-    @classmethod
-    def from_json(cls, path: Union[str, PathLike]):
-        with open(path, "r") as file:
-            d = json.load(file)
-
-        return Register({k: cls.__init__(**v) for k, v in d.items()})
-
 
 PhFeatureLabels = Literal["syl", "son", "cons", "cont", "delrel", "lat", "nas", "strid", "voi", "sg", "cg", "ant",
                           "cor", "distr", "lab", "hi", "lo", "back", "round", "tense", "long"]
@@ -80,6 +73,9 @@ class Word(Element, BaseModel):
         return self.syllables
 
 
+SyllableStream = Word
+
+
 class Lexicon(BaseModel, Element):
     id: str
     words: List[Word]
@@ -94,6 +90,10 @@ TypeRegister = TypeVar("TypeRegister")
 
 class Register(OrderedDict, Generic[S, T]):
     MAX_PRINT_ELEMENTS = 10
+
+    def __init__(self, other=(), /, **kwargs):
+        super().__init__(other, **kwargs)
+        self.info: Dict[str, Any] = {}
 
     def __contains__(self, item: Union[str, Element]):
         if isinstance(item, str):
@@ -133,7 +133,7 @@ class Register(OrderedDict, Generic[S, T]):
 
     def save(self, path: Union[str, PathLike] = None):
         if path is None:
-            path = RESULTS_DEFAULT_PATH / f"arc_{self[0].__class__.__name__}s.json"
+            path = f"arc_{self[0].__class__.__name__}s.json"
 
         if isinstance(path, str) and not path.endswith(".json"):
             path = path + ".json"
