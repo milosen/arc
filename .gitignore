@@ -161,3 +161,6 @@ cython_debug/
 
 arc_results/
 ssml/
+
+# we use json only for intermediate data storage
+*.json
