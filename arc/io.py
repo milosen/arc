@@ -1,16 +1,34 @@
 import csv
+import json
 import logging
-import pickle
+import os
+import pathlib
+from importlib import resources as importlib_resources
 from os import PathLike
-from typing import Iterable, Dict, Union, List
+from typing import Iterable, Dict, Union, List, Type, Optional
 
 import numpy as np
 from scipy import stats
-from tqdm.rich import tqdm
 
-from arc.definitions import *
 from arc.phonecodes import phonecodes
-from arc.types import Syllable, Phoneme, Register, Word
+from arc.types import Syllable, Phoneme, Register, Word, TypeRegister, Lexicon, PHONEME_FEATURE_LABELS
+
+
+def get_data_path(fname):
+    return importlib_resources.files("arc") / "data" / fname
+
+
+BINARY_FEATURES_DEFAULT_PATH = get_data_path("phonemes.csv")
+PHONEMES_DEFAULT_PATH = get_data_path("phonemes.json")
+
+CORPUS_DEFAULT_PATH = get_data_path("example_corpus")
+SYLLABLES_DEFAULT_PATH = CORPUS_DEFAULT_PATH / 'syll.txt'
+IPA_BIGRAMS_DEFAULT_PATH = CORPUS_DEFAULT_PATH / 'ipa_bigrams_german.csv'
+IPA_TRIGRAMS_DEFAULT_PATH = CORPUS_DEFAULT_PATH / 'ipa_trigrams_german.csv'
+IPA_SEG_DEFAULT_PATH = CORPUS_DEFAULT_PATH / 'german_IPA_seg.csv'
+
+RESULTS_DEFAULT_PATH = pathlib.Path("arc_results")
+SSML_RESULTS_DEFAULT_PATH = RESULTS_DEFAULT_PATH / "syllables"
 
 
 def export_speech_synthesiser(syllables: Iterable[Syllable],
@@ -28,25 +46,7 @@ def export_speech_synthesiser(syllables: Iterable[Syllable],
             f.write(synth_string + "\n")
             csv.writer(f)
 
-
-def maybe_load_from_file(path, force_redo: bool = False):
-    def _outer_wrapper(wrapped_function):
-        def _wrapper(*args, **kwargs):
-            if not os.path.exists(path) or force_redo:
-                logging.info("NO DATA FOUND, RUNNING AGAIN.")
-                data = wrapped_function(*args, **kwargs)
-
-                with open(path, 'wb') as f:
-                    pickle.dump(data, f, pickle.HIGHEST_PROTOCOL)
-
-            else:
-                logging.info("SKIPPING GENERATION. LOADING DATA FROM FILE.")
-                with open(path, 'rb') as f:
-                    data = pickle.load(f)
-
-            return data
-        return _wrapper
-    return _outer_wrapper
+    print("Done")
 
 
 def read_phoneme_corpus(
@@ -63,7 +63,7 @@ def read_phoneme_corpus(
     with open(ipa_seg_path, "r") as csv_file:
         fdata = list(csv.reader(csv_file, delimiter='\t'))
     phonemes = {}
-    for phon_data in tqdm(fdata[1:]):
+    for phon_data in fdata[1:]:
         phon_data_split = phon_data[0].split(",")
         if len(phon_data_split) == 3:
             phon = phon_data_split[1].replace('"', '').replace("g", "ɡ")
@@ -93,10 +93,10 @@ def read_syllables_corpus(
             syllables_dict[syll_ipa] = Syllable(
                 id=syll_ipa, phonemes=[], info=info, binary_features=[], phonotactic_features=[])
         else:
-            logging.warning(
-                f"Dropping syllable '{syll_ipa}' with conflicting stats {info} != {syllables_dict[syll_ipa].info}."
+            logging.info(
+                f"Syllable '{syll_ipa}' with conflicting stats {info} != {syllables_dict[syll_ipa].info}."
             )
-            del syllables_dict[syll_ipa]
+            # del syllables_dict[syll_ipa]
 
     return Register(syllables_dict)
 
@@ -123,10 +123,10 @@ def read_bigrams(
                 id=bigram, phonemes=[], info=info, binary_features=[], phonotactic_features=[]
             )
         else:
-            logging.warning(
-                f"Dropping bigram '{bigram}' with conflicting stats {info} != {bigrams_dict[bigram].info}."
+            logging.info(
+                f"Bigram '{bigram}' with conflicting stats {info} != {bigrams_dict[bigram].info}."
             )
-            del bigrams_dict[bigram]
+            # del bigrams_dict[bigram]
 
     return Register(bigrams_dict)
 
@@ -150,38 +150,12 @@ def read_trigrams(
                 id=trigram, phonemes=[], info=info, binary_features=[], phonotactic_features=[]
             )
         else:
-            logging.warning(
-                f"Dropping trigram '{trigram}' with conflicting stats {info} != {trigrams_dict[trigram].info}."
+            logging.info(
+                f"Trigram '{trigram}' with conflicting stats {info} != {trigrams_dict[trigram].info}."
             )
-            del trigrams_dict[trigram]
+            # del trigrams_dict[trigram]
 
     return Register(trigrams_dict)
-
-
-def read_phoneme_features(
-        binary_features_path: str = BINARY_FEATURES_DEFAULT_PATH,
-        return_as_dict: bool = False,
-) -> Union[Iterable[Phoneme], Dict[str, Phoneme]]:
-    logging.info("READ MATRIX OF BINARY FEATURES FOR ALL IPA PHONEMES")
-
-    with open(binary_features_path, "r") as csv_file:
-        fdata = list(csv.reader(csv_file))
-
-    phons = [row[0] for row in fdata[1:]]
-    feats = [row[1:] for row in fdata[1:]]
-
-    phonemes_dict = {}
-    for phon, features in zip(phons, feats):
-        if phon not in phonemes_dict or features == phonemes_dict[phon].features:
-            phonemes_dict[phon] = Phoneme(id=phon, features=features, order=[], info={})
-        else:
-            logging.warning(f"Dropping phoneme '{phon}' with conflicting feature entries {features} != {phonemes_dict[phon].features}.")
-            del phonemes_dict[phon]
-
-    if return_as_dict:
-        return phonemes_dict
-
-    return phonemes_dict.values()
 
 
 def read_phonemes_csv(binary_features_path: str = BINARY_FEATURES_DEFAULT_PATH) -> Register:
@@ -192,18 +166,21 @@ def read_phonemes_csv(binary_features_path: str = BINARY_FEATURES_DEFAULT_PATH) 
 
     phons = [row[0] for row in fdata[1:]]
     feats = [row[1:] for row in fdata[1:]]
+    phoneme_feature_labels = fdata[0][1:]
+
+    assert phoneme_feature_labels == PHONEME_FEATURE_LABELS
 
     phonemes_dict = {}
     for phon, features in zip(phons, feats):
         if phon not in phonemes_dict or features == phonemes_dict[phon].info["features"]:
             phonemes_dict[phon] = Phoneme(id=phon, info={"features": features})
         else:
-            logging.warning(
-                f"Dropping phoneme '{phon}' with conflicting "
+            logging.info(
+                f"Phoneme '{phon}' with conflicting "
                 f"feature entries {features} != {phonemes_dict[phon].info['features']}.")
-            del phonemes_dict[phon]
+            # del phonemes_dict[phon]
 
-    return Register(phonemes_dict)
+    return Register(phonemes_dict, _info={"phoneme_feature_labels": phoneme_feature_labels})
 
 
 def check_german(words: List[Word]):
@@ -233,3 +210,33 @@ def check_german(words: List[Word]):
     words = [row[0] for row in rows if row[1] == "0"]
 
     return words
+
+
+def load_default_phonemes():
+    return read_phonemes_csv()
+
+
+def from_json(path: Union[str, PathLike], arc_type: Type) -> TypeRegister:
+    with open(path, "r") as file:
+        d = json.load(file)
+
+    return Register({k: arc_type(**v) for k, v in d.items() if k != "_info"}, _info=d["_info"])
+
+
+def load_phonemes(path: Optional[Union[str, PathLike]] = None) -> TypeRegister:
+    if path is None:
+        return load_default_phonemes()
+
+    return from_json(path, Phoneme)
+
+
+def load_syllables(path: Union[str, PathLike]):
+    return from_json(path, Syllable)
+
+
+def load_words(path: Union[str, PathLike]):
+    return from_json(path, Word)
+
+
+def load_lexicons(path: Union[str, PathLike]):
+    return from_json(path, Lexicon)

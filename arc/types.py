@@ -1,22 +1,19 @@
-import dataclasses
 import json
-import logging
-import os
 import random
 from abc import ABC, abstractmethod
-from collections import OrderedDict, namedtuple
-from dataclasses import dataclass
-from enum import Enum
+from collections import OrderedDict
+from copy import copy
 from os import PathLike
-from typing import List, Dict, Any, NewType, TypeVar, Union, Type, Literal
+from typing import List, Dict, Any, TypeVar, Union, Literal, get_args
 
-from pydantic import BaseModel, PositiveInt, NonNegativeInt
+from pydantic import BaseModel
 
-from arc.definitions import PHONEME_FEATURE_LABELS, RESULTS_DEFAULT_PATH
-from typing import TypeVar, Generic
+TypePhonemeFeatureLabels = Literal[
+    "syl", "son", "cons", "cont", "delrel", "lat", "nas", "strid", "voi", "sg", "cg", "ant", "cor", "distr", "lab",
+    "hi", "lo", "back", "round", "tense", "long"
+]
 
-T = TypeVar('T')
-S = TypeVar('S')
+PHONEME_FEATURE_LABELS = list(get_args(TypePhonemeFeatureLabels))
 
 
 class Element(ABC):
@@ -37,10 +34,6 @@ class Element(ABC):
         pass
 
 
-PhFeatureLabels = Literal["syl", "son", "cons", "cont", "delrel", "lat", "nas", "strid", "voi", "sg", "cg", "ant",
-                          "cor", "distr", "lab", "hi", "lo", "back", "round", "tense", "long"]
-
-
 class Phoneme(Element, BaseModel):
     id: str
     info: Dict[str, Any]
@@ -48,10 +41,10 @@ class Phoneme(Element, BaseModel):
     def get_elements(self):
         return []
 
-    def get_feature_symbol(self, label: PhFeatureLabels):
+    def get_feature_symbol(self, label: TypePhonemeFeatureLabels):
         return self.info["features"][PHONEME_FEATURE_LABELS.index(label)]
 
-    def get_binary_feature(self, label: PhFeatureLabels):
+    def get_binary_feature(self, label: TypePhonemeFeatureLabels):
         return self.get_feature_symbol(label) == "+"
 
 
@@ -85,15 +78,21 @@ class Lexicon(BaseModel, Element):
         return self.words
 
 
-TypeRegister = TypeVar("TypeRegister")
+TypeRegister = TypeVar("TypeRegister", bound="Register")
 
 
-class Register(OrderedDict, Generic[S, T]):
+class Register(OrderedDict):
     MAX_PRINT_ELEMENTS = 10
+    INFO_KEY = "_info"
 
     def __init__(self, other=(), /, **kwargs):
+        if self.INFO_KEY in kwargs:
+            self.info = kwargs[self.INFO_KEY]
+            del kwargs[self.INFO_KEY]
+        else:
+            self.info = {}
+
         super().__init__(other, **kwargs)
-        self.info: Dict[str, Any] = {}
 
     def __contains__(self, item: Union[str, Element]):
         if isinstance(item, str):
@@ -102,6 +101,14 @@ class Register(OrderedDict, Generic[S, T]):
             return item.id in self.keys()
         else:
             raise ValueError("item type unknown")
+
+    @property
+    def info(self):
+        return self._info
+
+    @info.setter
+    def info(self, value: Dict):
+        self._info = value
 
     def __iter__(self):
         return iter(self.values())
@@ -114,12 +121,21 @@ class Register(OrderedDict, Generic[S, T]):
 
     def __str__(self):
         li = list(self.keys())
-        return "|".join(li[:self.MAX_PRINT_ELEMENTS]) + "|..." + f" ({len(li)} elements total)"
+        n_elements = len(li)
+
+        s = "|".join(li[:self.MAX_PRINT_ELEMENTS])
+
+        if n_elements > self.MAX_PRINT_ELEMENTS:
+            s += "|..."
+
+        s += f" ({n_elements} elements total)"
+
+        return s
 
     def append(self, obj: Element):
         self[str(obj)] = obj
 
-    def get_subset(self, size: int):
+    def get_subset(self, size: int) -> TypeRegister:
         """Create a new Register as a random subset of this one"""
         if size >= len(self):
             return self
@@ -129,21 +145,46 @@ class Register(OrderedDict, Generic[S, T]):
         for _ in range(size):
             keys.add(random.choice(list(self.keys() - keys)))
 
-        return Register({key: self[key] for key in keys})
+        return Register({key: self[key] for key in keys}, _info=self.info)
+
+    def get_self_with_info_key(self):
+        d = copy(self)
+        d.update({self.INFO_KEY: self.info})
+        return d
+
+    def to_json(self):
+        return json.dumps(self.get_self_with_info_key(), default=lambda o: o.model_dump(),
+                          sort_keys=False, ensure_ascii=False)
 
     def save(self, path: Union[str, PathLike] = None):
         if path is None:
-            path = f"arc_{self[0].__class__.__name__}s.json"
+            path = f"{self[0].__class__.__name__.lower()}s.json"
 
         if isinstance(path, str) and not path.endswith(".json"):
             path = path + ".json"
 
         with open(path, "w") as file:
-            json.dump(self, file, default=lambda o: o.model_dump(), sort_keys=True, ensure_ascii=False)
+            json.dump(self.get_self_with_info_key(), file,
+                      default=lambda o: o.model_dump(), sort_keys=False, ensure_ascii=False)
 
+    def intersection(
+            self,
+            other: TypeRegister
+    ) -> TypeRegister:
+        """
+        Select Elements that are in both corpora and merge the data
+        :param other:
+        :return:
+        """
 
-def from_json(path: Union[str, PathLike], arc_type: Type = T) -> Register[str, T]:
-    with open(path, "r") as file:
-        d = json.load(file)
+        def merge_infos(element_1, element_2):
+            element_new = copy(element_1)
+            element_new.info.update(element_2.info)
+            return element_new
 
-    return Register({k: arc_type(**v) for k, v in d.items()})
+        new_corpus_info = copy(self.info)
+        new_corpus_info.update(other.info)
+
+        return Register({
+            key: merge_infos(element, other[key]) for key, element in self.items() if key in other
+        }, _info=new_corpus_info)

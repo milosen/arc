@@ -1,4 +1,5 @@
 import logging
+from copy import copy
 from os import PathLike
 from typing import Iterable, Dict, List, Union, Optional
 
@@ -6,38 +7,17 @@ import numpy as np
 from scipy import stats
 from tqdm.rich import tqdm
 
-from arc.definitions import *
-from arc.functional import add_custom_features
-from arc.io import read_syllables_corpus, read_phoneme_corpus, read_bigrams, read_trigrams
-from arc.types import Syllable, Phoneme, Word, Register, T
+from arc.io import read_phoneme_corpus, read_bigrams, read_trigrams, IPA_SEG_DEFAULT_PATH, IPA_BIGRAMS_DEFAULT_PATH, \
+    IPA_TRIGRAMS_DEFAULT_PATH
+from arc.types import Syllable, Phoneme, Word, Register
 
 
 def filter_uniform_syllables(syllables: Register[str, Syllable]):
     logging.info("FILTER UNIFORMLY DISTRIBUTED SYLLABLES")
     freqs = [s.info["freq"] for s in syllables]
     p_vals_uniform = stats.uniform.sf(abs(stats.zscore(np.log(freqs))))
-    return Register({k: v for i, (k, v) in enumerate(syllables.items()) if p_vals_uniform[i] > 0.05})
-
-
-def merge_collections(
-        first: Register[str, T],
-        second: Register[str, T]
-) -> Register[str, T]:
-    """
-    Select Elements that are in both records and merge the data
-    :param first:
-    :param second:
-    :return:
-    """
-
-    def merge_infos(element_1, element_2):
-        element_new = element_1.copy()
-        element_new.info.update(element_2.info)
-        return element_new
-
-    return Register({
-        key: merge_infos(element, second[key]) for key, element in first.items() if key in second
-    })
+    return Register({k: v for i, (k, v) in enumerate(syllables.items()) if p_vals_uniform[i] > 0.05},
+                    _info=copy(syllables.info))
 
 
 def filter_common_phoneme_syllables(syllables, ipa_seg_path: Union[str, PathLike] = IPA_SEG_DEFAULT_PATH):
@@ -49,7 +29,7 @@ def filter_common_phoneme_syllables(syllables, ipa_seg_path: Union[str, PathLike
 
     return Register({
         syllable.id: syllable for syllable in syllables if is_native(syllable)
-    })
+    }, _info=copy(syllables.info))
 
 
 def get_rare_phonemes(syllables: Iterable[Syllable], phonemes: Dict[str, Phoneme],
@@ -83,7 +63,6 @@ def filter_common_phoneme_words(words, position: int = 0, ipa_seg_path: Union[st
     list_syllables = [syllable for word in words for syllable in word]
 
     rare_phonemes = get_rare_phonemes(list_syllables, native_phonemes)
-    logging.info("Rare onset phonemes:", [p.id for p in rare_phonemes])
 
     # e.g. word[syll_idx=0][phon_idx=0] means first phoneme in first syllable of the word
     if position == -1:
@@ -94,7 +73,7 @@ def filter_common_phoneme_words(words, position: int = 0, ipa_seg_path: Union[st
 
     return Register({
         word.id: word for word in tqdm(words) if word[syll_idx][phon_idx] not in rare_phonemes
-    })
+    }, _info=copy(words.info))
 
 
 def check_bigram_stats(word: Word, valid_bigrams: Register[str, Syllable]):
@@ -127,6 +106,8 @@ def filter_gram_stats(words: Register[str, Word],
         logging.info("Nothing to do. Please supply bigrams and/or trigrams path")
         return words
 
+    info = copy(words.info)
+
     filtered_words = Register(**words)
     if bigrams:
         bigrams: Register[str, Syllable] = read_bigrams(bigrams)
@@ -134,6 +115,8 @@ def filter_gram_stats(words: Register[str, Word],
             bigrams = Register({
                 k: v for bigram in bigrams for k, v in bigram.items() if bigram.info["p_unif"] > 0.05
             })
+            info.update({"bigram_pval": 0.05})
+        info.update({"bigrams": bigrams, "bigrams_count": len(bigrams)})
         filtered_words_dict = {word.id: word for word in filtered_words if check_bigram_stats(word, bigrams)}
         filtered_words = Register(**filtered_words_dict)
 
@@ -142,7 +125,11 @@ def filter_gram_stats(words: Register[str, Word],
         if uniform_trigrams:
             trigrams_dict = {k: v for bigram in bigrams for k, v in bigram.items() if bigram.info["p_unif"] > 0.05}
             trigrams = Register(**trigrams_dict)
+            info.update({"trigram_pval": 0.05})
+        info.update({"trigrams": trigrams, "trigrams_count": len(trigrams)})
         filtered_words_dict = {word.id: word for word in filtered_words if check_trigram_stats(word, trigrams)}
         filtered_words = Register(**filtered_words_dict)
+
+    filtered_words.info = info
 
     return filtered_words
