@@ -1,11 +1,14 @@
-import json
 import warnings
-from os import PathLike
-from typing import Union, Type
 
 from tqdm import TqdmExperimentalWarning
 
 from .io import load_phonemes, load_syllables, load_words, load_lexicons
-from .types import Phoneme, Syllable, Word, Lexicon, Register, TypeRegister, Element
+
+from .core.word import Word, WordType
+from .core.syllable import Syllable, SyllableType
+from .core.phoneme import Phoneme, PhonemeType
+
+from .tpc.stream import Stream, StreamType
+from .tpc.lexicon import LexiconType
 
 warnings.filterwarnings("ignore", category=TqdmExperimentalWarning)

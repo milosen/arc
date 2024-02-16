@@ -2,12 +2,14 @@ import itertools
 import logging
 from copy import copy
 from functools import reduce
-from typing import List, Union
+from typing import List, Union, TypeVar, Dict, Any
 
+from pydantic import BaseModel
 from tqdm.rich import tqdm
 
-from arc.types import Syllable, Register, Phoneme, TypeRegister
-
+from arc.core.base_types import Register, RegisterType
+from arc.core.phoneme import Phoneme
+from arc.core.base_types import Element
 
 LABELS_C = ['son', 'back', 'hi', 'lab', 'cor', 'cont', 'lat', 'nas', 'voi']
 LABELS_V = ['back', 'hi', 'lo', 'lab', 'tense', 'long']
@@ -40,11 +42,11 @@ def add_phonotactic_features(syllable_phonemes: List[Phoneme]):
 
 
 def make_feature_syllables(
-    phonemes: TypeRegister,
+    phonemes: RegisterType,
     phoneme_pattern: Union[str, list] = "cV",
     max_combinations: int = 1_000_000,
     progress_bar: bool = False,
-) -> TypeRegister:
+) -> RegisterType:
     """Generate syllables form feature-phonemes. Only keep syllables that follow the phoneme pattern"""
 
     logging.info("SELECT SYLLABLES WITH GIVEN PHONEME-TYPE PATTERN AND WITH PHONEMES WE HAVE FEATURES FOR")
@@ -120,3 +122,15 @@ def make_feature_syllables(
     new_info.update({"syllable_feature_labels": syll_feature_labels,  "phoneme_pattern": phoneme_pattern})
 
     return Register(syllables_dict, _info=new_info)
+
+
+SyllableType = TypeVar("SyllableType", bound="Syllable")
+
+
+class Syllable(Element, BaseModel):
+    id: str
+    phonemes: List[Phoneme]
+    info: Dict[str, Any]
+
+    def get_elements(self):
+        return self.phonemes

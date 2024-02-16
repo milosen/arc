@@ -3,16 +3,22 @@ import itertools
 import logging
 import math
 import random
-from typing import List, Optional, Literal, Tuple
+from copy import copy
+from typing import List, Optional, Literal, Tuple, Dict
 
 import numpy as np
 
-from arc.generation.common import get_oscillation_patterns
-from arc.generation.lexicons import make_lexicon_generator
-from arc.types import Word, Syllable, Register, SyllableStream
+from arc.tpc.common import get_oscillation_patterns
+from arc.tpc.lexicon import make_lexicon_generator
+from arc.core.base_types import Register
+from arc.core.syllable import Syllable
+from arc.core.word import WordType, Word
+
+StreamType = WordType
+Stream = Word
 
 
-# TODO: Make pretty from here
+# TODO: Make pretty
 
 def transitional_p_matrix(v):
     n = 1 + max(v)
@@ -208,7 +214,8 @@ def make_stream_from_lexicon(lexicon: Register[str, Word],
         if max(rhythmicity_indexes) <= max_rhythmicity:
             i_labels = enumerate(lexicon.info["syllable_feature_labels"])
             feature_labels = [f"phon_{i_phon+1}_{label}" for i_phon, labels in i_labels for label in labels]
-            return SyllableStream(
+
+            return Stream(
                 id="".join([syll.id for syll in sylls_stream]),
                 syllables=sylls_stream,
                 info={
@@ -226,13 +233,13 @@ def make_stream_from_words(words: Register[str, Word],
                            max_lexicons: int = 10,
                            max_rhythmicity=0.1,
                            max_tries_randomize=10,
-                           rand_mode: Literal["word", "syllable"] = "word") -> Optional[SyllableStream]:
+                           rand_mode: Literal["word", "syllable"] = "word") -> Optional[StreamType]:
 
     l_gen = make_lexicon_generator(words=words,
                                    n_words=n_words, max_overlap=max_word_overlap, max_yields=max_lexicons)
 
     for lex in l_gen:
-        maybe_stream: Optional[SyllableStream] = make_stream_from_lexicon(
+        maybe_stream: Optional[StreamType] = make_stream_from_lexicon(
             lex,
             max_rhythmicity=max_rhythmicity,
             max_tries_randomize=max_tries_randomize,
@@ -253,6 +260,7 @@ def make_compatible_streams(words: Register[str, Word],
 
     lexicon_generator_1 = make_lexicon_generator(
         words=words, n_words=n_words, max_overlap=max_word_overlap, max_yields=max_lexicons)
+
     lexicon_generator_2 = make_lexicon_generator(
         words=words, n_words=n_words, max_overlap=max_word_overlap, max_yields=max_lexicons)
 
@@ -263,7 +271,7 @@ def make_compatible_streams(words: Register[str, Word],
             logging.info("Dropping Lexicons because they have overlapping syllables.")
             continue
 
-        maybe_stream_1_words: Optional[SyllableStream] = make_stream_from_lexicon(
+        maybe_stream_1_words: Optional[StreamType] = make_stream_from_lexicon(
             lexicon_1,
             max_rhythmicity=max_rhythmicity,
             max_tries_randomize=max_tries_randomize,
@@ -274,7 +282,7 @@ def make_compatible_streams(words: Register[str, Word],
             logging.info("Dropping Lexicons because no good word-randomized stream for Lexicon 1 was found.")
             continue
 
-        maybe_stream_1_sylls: Optional[SyllableStream] = make_stream_from_lexicon(
+        maybe_stream_1_sylls: Optional[StreamType] = make_stream_from_lexicon(
             lexicon_1,
             max_rhythmicity=max_rhythmicity,
             max_tries_randomize=max_tries_randomize,
@@ -285,7 +293,7 @@ def make_compatible_streams(words: Register[str, Word],
             logging.info("Dropping Lexicons because no good syllable-randomized stream for Lexicon 1 was found.")
             continue
 
-        maybe_stream_2_words: Optional[SyllableStream] = make_stream_from_lexicon(
+        maybe_stream_2_words: Optional[StreamType] = make_stream_from_lexicon(
             lexicon_1,
             max_rhythmicity=max_rhythmicity,
             max_tries_randomize=max_tries_randomize,
@@ -296,7 +304,7 @@ def make_compatible_streams(words: Register[str, Word],
             logging.info("Dropping Lexicons because no good syllable-randomized stream for Lexicon 1 was found.")
             continue
 
-        maybe_stream_2_sylls: Optional[SyllableStream] = make_stream_from_lexicon(
+        maybe_stream_2_sylls: Optional[StreamType] = make_stream_from_lexicon(
             lexicon_1,
             max_rhythmicity=max_rhythmicity,
             max_tries_randomize=max_tries_randomize,
@@ -310,3 +318,14 @@ def make_compatible_streams(words: Register[str, Word],
         return maybe_stream_1_words, maybe_stream_1_sylls, maybe_stream_2_words, maybe_stream_2_sylls
 
     return tuple()
+
+
+def get_stream_syllable_stats(stream: StreamType) -> Dict:
+    d = {}
+    for syllable in stream:
+        if syllable.id in d:
+            d[syllable.id] += 1
+        else:
+            d[syllable.id] = 1
+
+    return d

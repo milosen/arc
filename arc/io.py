@@ -5,13 +5,17 @@ import os
 import pathlib
 from importlib import resources as importlib_resources
 from os import PathLike
-from typing import Iterable, Dict, Union, List, Type, Optional
+from typing import Iterable, Dict, Union, List, Type, Optional, Literal
 
 import numpy as np
 from scipy import stats
 
 from arc.phonecodes import phonecodes
-from arc.types import Syllable, Phoneme, Register, Word, TypeRegister, Lexicon, PHONEME_FEATURE_LABELS
+from arc.core.base_types import Register, RegisterType
+from arc.core.syllable import Syllable
+from arc.core.word import Word
+from arc.core.phoneme import PHONEME_FEATURE_LABELS, Phoneme
+from arc.tpc.lexicon import LexiconType
 
 
 def get_data_path(fname):
@@ -76,8 +80,19 @@ def read_phoneme_corpus(
     return Register(phonemes)
 
 
+def syll_to_ipa(syll, language="deu", from_format="xsampa"):
+    if from_format == "xsampa":
+        return phonecodes.xsampa2ipa(syll, language)
+    elif from_format == "ipa":
+        return syll
+    else:
+        raise ValueError(f"Unknown format {from_format}")
+
+
 def read_syllables_corpus(
         syllables_corpus_path: Union[os.PathLike, str] = SYLLABLES_DEFAULT_PATH,
+        from_format: Literal["ipa", "xsampa"] = "xsampa",
+        lang: str = "deu",
 ) -> Register[str, Syllable]:
     logging.info("READ SYLLABLES, FREQUENCIES AND PROBABILITIES FROM CORPUS AND CONVERT SYLLABLES TO IPA")
 
@@ -87,7 +102,7 @@ def read_syllables_corpus(
     syllables_dict: Dict[str, Syllable] = {}
 
     for syll_stats in fdata[1:]:
-        syll_ipa = phonecodes.xsampa2ipa(syll_stats[1], 'deu')
+        syll_ipa = syll_to_ipa(syll_stats[1])
         info = {"freq": int(syll_stats[2]), "prob": float(syll_stats[3])}
         if syll_ipa not in syllables_dict or syllables_dict[syll_ipa].info != info:
             syllables_dict[syll_ipa] = Syllable(
@@ -118,10 +133,10 @@ def read_bigrams(
         bigram_stats = bigram_stats[0].split(",")
         bigram = bigram_stats[1].replace('_', '').replace("g", "ɡ")
         info = {"freq": int(bigram_stats[2]), "p_unif": p_unif}
+
         if bigram not in bigrams_dict or bigrams_dict[bigram].info == info:
-            bigrams_dict[bigram] = Syllable(
-                id=bigram, phonemes=[], info=info, binary_features=[], phonotactic_features=[]
-            )
+            # a bigram is not necessarily a syllable but in our type system they are equivalent
+            bigrams_dict[bigram] = Syllable(id=bigram, phonemes=[], info=info)
         else:
             logging.info(
                 f"Bigram '{bigram}' with conflicting stats {info} != {bigrams_dict[bigram].info}."
@@ -145,10 +160,9 @@ def read_trigrams(
         data = data[0].split(",")
         trigram = data[0].replace('_', '').replace("g", "ɡ")
         info = {"freq": int(data[1]), "p_unif": p_unif}
+
         if trigram not in trigrams_dict or trigrams_dict[trigram].info == info:
-            trigrams_dict[trigram] = Syllable(
-                id=trigram, phonemes=[], info=info, binary_features=[], phonotactic_features=[]
-            )
+            trigrams_dict[trigram] = Syllable(id=trigram, phonemes=[], info=info)
         else:
             logging.info(
                 f"Trigram '{trigram}' with conflicting stats {info} != {trigrams_dict[trigram].info}."
@@ -216,27 +230,34 @@ def load_default_phonemes():
     return read_phonemes_csv()
 
 
-def from_json(path: Union[str, PathLike], arc_type: Type) -> TypeRegister:
+def arc_register_from_json(path: Union[str, PathLike], arc_type: Type) -> RegisterType:
+    """
+    Load an arc register from a json file.
+    """
     with open(path, "r") as file:
         d = json.load(file)
 
-    return Register({k: arc_type(**v) for k, v in d.items() if k != "_info"}, _info=d["_info"])
+    # we have to process the "_info" field separately because it's not a valid ARC type
+    register = Register({k: arc_type(**v) for k, v in d.items() if k != "_info"})
+    register.info = d["_info"]
+
+    return register
 
 
-def load_phonemes(path: Optional[Union[str, PathLike]] = None) -> TypeRegister:
-    if path is None:
+def load_phonemes(path_to_json: Optional[Union[str, PathLike]] = None) -> RegisterType:
+    if path_to_json is None:
         return load_default_phonemes()
 
-    return from_json(path, Phoneme)
+    return arc_register_from_json(path_to_json, Phoneme)
 
 
-def load_syllables(path: Union[str, PathLike]):
-    return from_json(path, Syllable)
+def load_syllables(path_to_json: Union[str, PathLike]):
+    return arc_register_from_json(path_to_json, Syllable)
 
 
-def load_words(path: Union[str, PathLike]):
-    return from_json(path, Word)
+def load_words(path_to_json: Union[str, PathLike]):
+    return arc_register_from_json(path_to_json, Word)
 
 
-def load_lexicons(path: Union[str, PathLike]):
-    return from_json(path, Lexicon)
+def load_lexicons(path_to_json: Union[str, PathLike]):
+    return arc_register_from_json(path_to_json, LexiconType)

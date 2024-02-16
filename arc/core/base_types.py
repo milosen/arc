@@ -4,16 +4,9 @@ from abc import ABC, abstractmethod
 from collections import OrderedDict
 from copy import copy
 from os import PathLike
-from typing import List, Dict, Any, TypeVar, Union, Literal, get_args
+from typing import Dict, Any, TypeVar, Union
 
-from pydantic import BaseModel
-
-TypePhonemeFeatureLabels = Literal[
-    "syl", "son", "cons", "cont", "delrel", "lat", "nas", "strid", "voi", "sg", "cg", "ant", "cor", "distr", "lab",
-    "hi", "lo", "back", "round", "tense", "long"
-]
-
-PHONEME_FEATURE_LABELS = list(get_args(TypePhonemeFeatureLabels))
+RegisterType = TypeVar("RegisterType", bound="Register")
 
 
 class Element(ABC):
@@ -32,53 +25,6 @@ class Element(ABC):
     @abstractmethod
     def get_elements(self):
         pass
-
-
-class Phoneme(Element, BaseModel):
-    id: str
-    info: Dict[str, Any]
-
-    def get_elements(self):
-        return []
-
-    def get_feature_symbol(self, label: TypePhonemeFeatureLabels):
-        return self.info["features"][PHONEME_FEATURE_LABELS.index(label)]
-
-    def get_binary_feature(self, label: TypePhonemeFeatureLabels):
-        return self.get_feature_symbol(label) == "+"
-
-
-class Syllable(Element, BaseModel):
-    id: str
-    phonemes: List[Phoneme]
-    info: Dict[str, Any]
-
-    def get_elements(self):
-        return self.phonemes
-
-
-class Word(Element, BaseModel):
-    id: str
-    syllables: List[Syllable]
-    info: Dict[str, Any]
-
-    def get_elements(self):
-        return self.syllables
-
-
-SyllableStream = Word
-
-
-class Lexicon(BaseModel, Element):
-    id: str
-    words: List[Word]
-    info: Dict[str, Any]
-
-    def get_elements(self):
-        return self.words
-
-
-TypeRegister = TypeVar("TypeRegister", bound="Register")
 
 
 class Register(OrderedDict):
@@ -135,7 +81,7 @@ class Register(OrderedDict):
     def append(self, obj: Element):
         self[str(obj)] = obj
 
-    def get_subset(self, size: int) -> TypeRegister:
+    def get_subset(self, size: int) -> RegisterType:
         """Create a new Register as a random subset of this one"""
         if size >= len(self):
             return self
@@ -169,8 +115,8 @@ class Register(OrderedDict):
 
     def intersection(
             self,
-            other: TypeRegister
-    ) -> TypeRegister:
+            other: RegisterType
+    ) -> RegisterType:
         """
         Select Elements that are in both corpora and merge the data
         :param other:

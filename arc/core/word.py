@@ -1,14 +1,17 @@
 import itertools
-import itertools
 import logging
 import random
 from copy import copy
+from typing import TypeVar, List, Dict, Any
 
 import numpy as np
+from pydantic import BaseModel
 from tqdm.rich import tqdm
 
-from arc.generation.common import get_oscillation_patterns
-from arc.types import Word, Register
+from arc.core.syllable import Syllable
+from arc.core.base_types import Register, Element, RegisterType
+
+from arc.tpc.common import get_oscillation_patterns
 
 
 def check_syll_feature_overlap(syllables):
@@ -26,19 +29,19 @@ def generate_subset_syllables(syllables, lookback_syllables):
     return subset
 
 
-def make_words(syllables: Register,
+def make_words(syllables: RegisterType,
                n_sylls=3,
                n_look_back=2,
                n_words=10_000,
                max_tries=100_000,
                progress_bar: bool = False,
-               ) -> Register:
+               ) -> RegisterType:
     words = {}
 
     iter_tries = range(max_tries)
 
     if progress_bar:
-        iter_tries = tqdm(iter_tries)
+        pbar = tqdm(total=n_words)
 
     for _ in iter_tries:
         sylls = []
@@ -52,14 +55,28 @@ def make_words(syllables: Register,
         if len(sylls) == n_sylls:
             word_id = "".join(s.id for s in sylls)
             if word_id not in words:
-                word_features = list(zip(*[s.info["binary_features"] for s in sylls]))
+                word_features = list(list(tup) for tup in zip(*[s.info["binary_features"] for s in sylls]))
                 words[word_id] = Word(id=word_id, info={"binary_features": word_features}, syllables=sylls)
+                if progress_bar:
+                    pbar.update(1)
 
         if len(words) == n_words:
             logging.info(f"Done: Found {n_words} words.")
             break
 
-    return Register(words, _info=copy(syllables.info))
+    words_register = Register(words)
+    words_register.info = copy(syllables.info)
+
+    return words_register
+
+
+class Word(Element, BaseModel):
+    id: str
+    syllables: List[Syllable]
+    info: Dict[str, Any]
+
+    def get_elements(self):
+        return self.syllables
 
 
 def word_overlap_matrix(words: Register[str, Word]):
@@ -81,3 +98,6 @@ def word_overlap_matrix(words: Register[str, Word]):
         overlap[i1, i2] = matches
 
     return overlap
+
+
+WordType = TypeVar("WordType", bound="Word")

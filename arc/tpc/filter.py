@@ -1,7 +1,7 @@
 import logging
 from copy import copy
 from os import PathLike
-from typing import Iterable, Dict, List, Union, Optional
+from typing import Iterable, Dict, Union, Optional
 
 import numpy as np
 from scipy import stats
@@ -9,7 +9,8 @@ from tqdm.rich import tqdm
 
 from arc.io import read_phoneme_corpus, read_bigrams, read_trigrams, IPA_SEG_DEFAULT_PATH, IPA_BIGRAMS_DEFAULT_PATH, \
     IPA_TRIGRAMS_DEFAULT_PATH
-from arc.types import Syllable, Phoneme, Word, Register
+from arc.core.base_types import Register
+from arc import Phoneme, Syllable, Word
 
 
 def filter_uniform_syllables(syllables: Register[str, Syllable]):
@@ -99,7 +100,8 @@ def check_trigram_stats(word: Word, valid_trigrams: Register[str, Syllable]):
 def filter_gram_stats(words: Register[str, Word],
                       bigrams: Optional[Union[str, PathLike]] = IPA_BIGRAMS_DEFAULT_PATH,
                       trigrams: Optional[Union[str, PathLike]] = IPA_TRIGRAMS_DEFAULT_PATH,
-                      uniform_bigrams=False, uniform_trigrams=False) -> Register[str, Word]:
+                      p_val_uniform_bigrams: float = 0.05,
+                      p_val_uniform_trigrams: float = 0.05) -> Register[str, Word]:
     logging.info("SELECT WORDS WITH UNIFORM BIGRAM AND NON-ZERO TRIGRAM LOG-PROBABILITY OF OCCURRENCE IN THE CORPUS")
 
     if not bigrams and not trigrams:
@@ -109,24 +111,24 @@ def filter_gram_stats(words: Register[str, Word],
     info = copy(words.info)
 
     filtered_words = Register(**words)
+
     if bigrams:
         bigrams: Register[str, Syllable] = read_bigrams(bigrams)
-        if uniform_bigrams:
+        if p_val_uniform_bigrams > 0.:
             bigrams = Register({
-                k: v for bigram in bigrams for k, v in bigram.items() if bigram.info["p_unif"] > 0.05
+                k: bigram for k, bigram in bigrams.items() if bigram.info["p_unif"] > p_val_uniform_bigrams
             })
-            info.update({"bigram_pval": 0.05})
-        info.update({"bigrams": bigrams, "bigrams_count": len(bigrams)})
+        info.update({"bigram_pval": p_val_uniform_bigrams, "bigrams_count": len(bigrams)})
         filtered_words_dict = {word.id: word for word in filtered_words if check_bigram_stats(word, bigrams)}
         filtered_words = Register(**filtered_words_dict)
 
     if trigrams:
         trigrams: Register[str, Syllable] = read_trigrams(trigrams)
-        if uniform_trigrams:
-            trigrams_dict = {k: v for bigram in bigrams for k, v in bigram.items() if bigram.info["p_unif"] > 0.05}
-            trigrams = Register(**trigrams_dict)
-            info.update({"trigram_pval": 0.05})
-        info.update({"trigrams": trigrams, "trigrams_count": len(trigrams)})
+        if p_val_uniform_trigrams > 0.:
+            trigrams = Register({
+                k: trigram for k, trigram in trigrams.items() if trigram.info["p_unif"] > p_val_uniform_trigrams
+            })
+        info.update({"trigram_pval": p_val_uniform_trigrams, "trigrams_count": len(trigrams)})
         filtered_words_dict = {word.id: word for word in filtered_words if check_trigram_stats(word, trigrams)}
         filtered_words = Register(**filtered_words_dict)
 

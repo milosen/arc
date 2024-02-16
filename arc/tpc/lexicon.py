@@ -2,32 +2,44 @@ import itertools
 import logging
 import math
 from copy import copy
-from typing import Generator, Tuple
+from functools import partial
+from typing import Generator, Tuple, Set
 
 import numpy as np
 
-from arc.generation.words import word_overlap_matrix
-from arc.types import Word, Register, Lexicon, TypeRegister
+from arc.core.word import word_overlap_matrix, WordType
+from arc.core.syllable import SyllableType
+from arc.core.base_types import Register, RegisterType
 
 
-# TODO: Make pretty from here
+LexiconType = RegisterType
+
+
+def word_as_syllable_set(word: WordType) -> Set[SyllableType]:
+    return set(syllable.id for syllable in word)
+
+
+def check_no_syllable_overlap(words, word_index_pair):
+    index_word_1, index_word_2 = set(word_index_pair)
+
+    syllables_word_1 = word_as_syllable_set(words[index_word_1])
+    syllables_word_2 = word_as_syllable_set(words[index_word_2])
+
+    intersection = syllables_word_1.intersection(syllables_word_2)
+
+    return not intersection
 
 
 def make_lexicon_generator(
-        words: Register[str, Word],
+        words: RegisterType,
         n_words: int = 4,
         max_overlap: int = 1,
-        max_yields: int = 10) -> Generator[Lexicon, None, None]:
+        max_yields: int = 10) -> Generator[LexiconType, None, None]:
 
     overlap = word_overlap_matrix(words)
     options = dict((k, v) for k, v in locals().items() if not k == 'words' and not k == 'overlap')
     logging.info(f"GENERATE MIN OVERLAP LEXICONS WITH OPTIONS {options}")
     yields = 0
-
-    def check_no_syllable_overlap(pair):
-        w1, w2 = pair
-        intersection = set(syllable.id for syllable in words[w1]) & set(syllable.id for syllable in words[w2])
-        return not intersection
 
     iter_allowed_overlaps = itertools.product(range(max_overlap + 1), range(1, math.comb(n_words, 2)))
 
@@ -48,7 +60,10 @@ def make_lexicon_generator(
         # represent the matrix from above as a set of pairs of word indexes, e.g. {{0, 1}, {0, 2}, ...}
         min_overlap_pairs = zip(*np.where(valid_word_pairs_matrix))
         min_overlap_pairs = set(frozenset([int(pair[0]), int(pair[1])]) for pair in min_overlap_pairs)
-        min_overlap_pairs = set(filter(check_no_syllable_overlap, min_overlap_pairs))
+
+        # select only those pairs that have pairwise unique syllables
+        no_syllable_overlap = partial(check_no_syllable_overlap, words)
+        min_overlap_pairs = set(filter(no_syllable_overlap, min_overlap_pairs))
 
         for start_pair in min_overlap_pairs:
 
@@ -94,7 +109,7 @@ def make_lexicon_generator(
 
 
 def make_lexicons_from_words(
-        words: TypeRegister, n_lexicons: int = 5, n_words: int = 4, max_overlap: int = 1,
-) -> Tuple[Lexicon, ...]:
+        words: RegisterType, n_lexicons: int = 5, n_words: int = 4, max_overlap: int = 1,
+) -> Tuple[LexiconType, ...]:
     lexicon_generator = make_lexicon_generator(words, n_words=n_words, max_yields=n_lexicons, max_overlap=max_overlap)
     return tuple(lexicon for lexicon in lexicon_generator)
