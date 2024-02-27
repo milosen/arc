@@ -8,7 +8,7 @@ from .core.word import Word, WordType
 from .core.syllable import Syllable, SyllableType
 from .core.phoneme import Phoneme, PhonemeType
 
-from .tpc.stream import Stream, StreamType
-from .tpc.lexicon import LexiconType
+from .controls.stream import Stream, StreamType
+from .controls.lexicon import LexiconType
 
 warnings.filterwarnings("ignore", category=TqdmExperimentalWarning)

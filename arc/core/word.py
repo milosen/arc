@@ -11,7 +11,7 @@ from tqdm.rich import tqdm
 from arc.core.syllable import Syllable
 from arc.core.base_types import Register, Element, RegisterType
 
-from arc.tpc.common import get_oscillation_patterns
+from arc.controls.common import get_oscillation_patterns
 
 
 def check_syll_feature_overlap(syllables):

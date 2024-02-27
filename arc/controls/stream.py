@@ -8,8 +8,8 @@ from typing import List, Optional, Literal, Tuple, Dict
 
 import numpy as np
 
-from arc.tpc.common import get_oscillation_patterns
-from arc.tpc.lexicon import make_lexicon_generator
+from arc.controls.common import get_oscillation_patterns
+from arc.controls.lexicon import make_lexicon_generator
 from arc.core.base_types import Register
 from arc.core.syllable import Syllable
 from arc.core.word import WordType, Word
@@ -18,9 +18,8 @@ StreamType = WordType
 Stream = Word
 
 
-# TODO: Make pretty
-
 def transitional_p_matrix(v):
+    # TODO: make (faster and) easier to read
     n = 1 + max(v)
     M = [[0] * n for _ in range(n)]
     for (i, j) in zip(v, v[1:]):
@@ -33,7 +32,7 @@ def transitional_p_matrix(v):
 
 
 def pseudo_walk_tp_random(P, T, v, S, N, n_words=4, n_sylls_per_word=3):
-    # TODO
+    # TODO: make faster and easier to read
     t = []
     for iTrip in range(n_words):
         for iPoss in range(n_sylls_per_word):
@@ -64,7 +63,7 @@ def pseudo_walk_tp_random(P, T, v, S, N, n_words=4, n_sylls_per_word=3):
 
 
 def pseudo_rand_tp_random(n_words=4, n_sylls_per_word=3):
-    # TODO
+    # TODO: make faster and easier to read
     n_sylls_total = n_sylls_per_word * n_words  # number of syllables in a lexicon
     n_repetitions = n_sylls_total * 4  # number of repetitions in a trial
     P = [list(range(i, n_sylls_total, n_sylls_per_word)) for i in range(n_sylls_per_word)]
@@ -99,7 +98,7 @@ def pseudo_rand_tp_random(n_words=4, n_sylls_per_word=3):
 
 
 def pseudo_rand_tp_struct(n_words=4, n_sylls_per_word=3):
-    # TODO
+    # TODO: make faster and easier to read
     n_sylls_total = n_sylls_per_word * n_words  # number of syllables in a lexicon
     n_repetitions = n_sylls_total * 4  # number of repetitions in a trial
     while True:
@@ -161,27 +160,26 @@ def pseudo_rand_tp_struct(n_words=4, n_sylls_per_word=3):
 def sample_syllable_randomization(
         lexicon: Register[str, Word],
         max_tries=1000,
-        rand_mode: Literal["word", "syllable"] = "word") -> List[Syllable]:
-    if rand_mode == "word":
+        tp_mode: Literal["word_structured", "position_controlled", "random"] = "word_structured") -> List[Syllable]:
+    if tp_mode == "word_structured":
         elements = [word for word in lexicon]
         rand_func = pseudo_rand_tp_struct
-    elif rand_mode == "syllable":
+    elif tp_mode == "position_controlled":
         elements = [syllable for word in lexicon for syllable in word]
         rand_func = pseudo_rand_tp_random
     else:
-        raise ValueError(f"rand_mode '{rand_mode}' unknown.")
+        raise ValueError(f"tp_mode '{tp_mode}' unknown.")
 
     randomized_indexes_list = []
-    n_sylls = len(lexicon[0].syllables)
+    n_syllables = len(lexicon[0].syllables)
     n_words = len(lexicon)
 
     for _ in range(max_tries):
-        randomized_indexes, _ = rand_func(n_words=n_words, n_sylls_per_word=n_sylls)
+        randomized_indexes, _ = rand_func(n_words=n_words, n_sylls_per_word=n_syllables)
         if randomized_indexes not in randomized_indexes_list:
             randomized_indexes_list.append(randomized_indexes)
-            if rand_mode == "word":
-                yield [syll for index in randomized_indexes for syll in elements[index]]
-
+            if tp_mode == "word_structured":
+                yield [syllable for index in randomized_indexes for syllable in elements[index]]
             else:
                 yield [elements[index] for index in randomized_indexes]
 
@@ -201,13 +199,9 @@ def compute_rhythmicity_index_sylls_stream(stream, patterns):
 
 def make_stream_from_lexicon(lexicon: Register[str, Word],
                              max_rhythmicity=0.1, max_tries_randomize=10,
-                             rand_mode: Literal["word", "syllable"] = "word"):
+                             tp_mode: Literal["word_structured", "position_controlled", "random"] = "word_structured"):
 
-    for sylls_stream in sample_syllable_randomization(
-            lexicon,
-            max_tries=max_tries_randomize,
-            rand_mode=rand_mode
-    ):
+    for sylls_stream in sample_syllable_randomization(lexicon, max_tries=max_tries_randomize, tp_mode=tp_mode):
         patterns = get_oscillation_patterns(len(lexicon[0].syllables))
         rhythmicity_indexes = compute_rhythmicity_index_sylls_stream(sylls_stream, patterns)
 
@@ -221,7 +215,7 @@ def make_stream_from_lexicon(lexicon: Register[str, Word],
                 info={
                     "rhythmicity_indexes": {k: float(v) for k, v in zip(feature_labels, rhythmicity_indexes)},
                     "lexicon": lexicon,
-                    "rand_mode": rand_mode,
+                    "stream_tp_mode": tp_mode,
                     **lexicon.info,
                 }
             )
@@ -233,18 +227,16 @@ def make_stream_from_words(words: Register[str, Word],
                            max_lexicons: int = 10,
                            max_rhythmicity=0.1,
                            max_tries_randomize=10,
-                           rand_mode: Literal["word", "syllable"] = "word") -> Optional[StreamType]:
+                           tp_mode: Literal["word_structured", "position_controlled", "random"] = "word_structured"
+                           ) -> Optional[StreamType]:
 
     l_gen = make_lexicon_generator(words=words,
                                    n_words=n_words, max_overlap=max_word_overlap, max_yields=max_lexicons)
 
     for lex in l_gen:
-        maybe_stream: Optional[StreamType] = make_stream_from_lexicon(
-            lex,
-            max_rhythmicity=max_rhythmicity,
-            max_tries_randomize=max_tries_randomize,
-            rand_mode=rand_mode
-        )
+        maybe_stream: Optional[StreamType] = make_stream_from_lexicon(lex, max_rhythmicity=max_rhythmicity,
+                                                                      max_tries_randomize=max_tries_randomize,
+                                                                      tp_mode=tp_mode)
 
         if maybe_stream:
             return maybe_stream
@@ -271,45 +263,37 @@ def make_compatible_streams(words: Register[str, Word],
             logging.info("Dropping Lexicons because they have overlapping syllables.")
             continue
 
-        maybe_stream_1_words: Optional[StreamType] = make_stream_from_lexicon(
-            lexicon_1,
-            max_rhythmicity=max_rhythmicity,
-            max_tries_randomize=max_tries_randomize,
-            rand_mode="word"
-        )
+        maybe_stream_1_words: Optional[StreamType] = make_stream_from_lexicon(lexicon_1,
+                                                                              max_rhythmicity=max_rhythmicity,
+                                                                              max_tries_randomize=max_tries_randomize,
+                                                                              tp_mode="word_structured")
 
         if not maybe_stream_1_words:
             logging.info("Dropping Lexicons because no good word-randomized stream for Lexicon 1 was found.")
             continue
 
-        maybe_stream_1_sylls: Optional[StreamType] = make_stream_from_lexicon(
-            lexicon_1,
-            max_rhythmicity=max_rhythmicity,
-            max_tries_randomize=max_tries_randomize,
-            rand_mode="syllable"
-        )
+        maybe_stream_1_sylls: Optional[StreamType] = make_stream_from_lexicon(lexicon_1,
+                                                                              max_rhythmicity=max_rhythmicity,
+                                                                              max_tries_randomize=max_tries_randomize,
+                                                                              tp_mode="position_controlled")
 
         if not maybe_stream_1_sylls:
             logging.info("Dropping Lexicons because no good syllable-randomized stream for Lexicon 1 was found.")
             continue
 
-        maybe_stream_2_words: Optional[StreamType] = make_stream_from_lexicon(
-            lexicon_1,
-            max_rhythmicity=max_rhythmicity,
-            max_tries_randomize=max_tries_randomize,
-            rand_mode="word"
-        )
+        maybe_stream_2_words: Optional[StreamType] = make_stream_from_lexicon(lexicon_1,
+                                                                              max_rhythmicity=max_rhythmicity,
+                                                                              max_tries_randomize=max_tries_randomize,
+                                                                              tp_mode="word_structured")
 
         if not maybe_stream_2_words:
             logging.info("Dropping Lexicons because no good syllable-randomized stream for Lexicon 1 was found.")
             continue
 
-        maybe_stream_2_sylls: Optional[StreamType] = make_stream_from_lexicon(
-            lexicon_1,
-            max_rhythmicity=max_rhythmicity,
-            max_tries_randomize=max_tries_randomize,
-            rand_mode="syllable"
-        )
+        maybe_stream_2_sylls: Optional[StreamType] = make_stream_from_lexicon(lexicon_1,
+                                                                              max_rhythmicity=max_rhythmicity,
+                                                                              max_tries_randomize=max_tries_randomize,
+                                                                              tp_mode="position_controlled")
 
         if not maybe_stream_2_sylls:
             logging.info("Dropping Lexicons because no good syllable-randomized stream for Lexicon 2 was found.")

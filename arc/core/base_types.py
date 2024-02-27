@@ -74,7 +74,7 @@ class Register(OrderedDict):
         if n_elements > self.MAX_PRINT_ELEMENTS:
             s += "|..."
 
-        s += f" ({n_elements} elements total)"
+            s += f" ({n_elements} elements total)"
 
         return s
 
@@ -91,7 +91,7 @@ class Register(OrderedDict):
         for _ in range(size):
             keys.add(random.choice(list(self.keys() - keys)))
 
-        return Register({key: self[key] for key in keys}, _info=self.info)
+        return self.new_from_dict({key: self[key] for key in keys})
 
     def get_self_with_info_key(self):
         d = copy(self)
@@ -128,9 +128,14 @@ class Register(OrderedDict):
             element_new.info.update(element_2.info)
             return element_new
 
-        new_corpus_info = copy(self.info)
-        new_corpus_info.update(other.info)
-
-        return Register({
+        new_register = self.new_from_dict({
             key: merge_infos(element, other[key]) for key, element in self.items() if key in other
-        }, _info=new_corpus_info)
+        })
+
+        new_register.info.update(other.info)
+
+        return new_register
+
+    def new_from_dict(self, dictionary: dict) -> RegisterType:
+        new_info = copy(self.info)
+        return Register(dictionary, _info=new_info)

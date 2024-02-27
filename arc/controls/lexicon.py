@@ -98,8 +98,8 @@ def make_lexicon_generator(
                 # yield lexicon (guaranteed to be the next best)
                 lexicon = Register({words[idx].id:  words[idx] for idx in lexicon_indexes})
                 lexicon.info = copy(words.info)
-                lexicon.info["cumulative_overlap"] = cumulative_overlap
-                lexicon.info["max_pairwise_overlap"] = max_pair_overlap
+                lexicon.info["cumulative_feature_repetitiveness"] = cumulative_overlap
+                lexicon.info["max_pairwise_feature_repetitiveness"] = max_pair_overlap
                 yield lexicon
 
                 yields += 1

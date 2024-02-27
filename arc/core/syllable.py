@@ -119,7 +119,7 @@ def make_feature_syllables(
         syllables_dict[syll_id] = syllable
 
     new_info = copy(phonemes.info)
-    new_info.update({"syllable_feature_labels": syll_feature_labels,  "phoneme_pattern": phoneme_pattern})
+    new_info.update({"syllable_feature_labels": syll_feature_labels,  "syllable_type": phoneme_pattern})
 
     return Register(syllables_dict, _info=new_info)
 

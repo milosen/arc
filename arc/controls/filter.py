@@ -78,7 +78,7 @@ def filter_common_phoneme_words(words, position: int = 0, ipa_seg_path: Union[st
 
 
 def check_bigram_stats(word: Word, valid_bigrams: Register[str, Syllable]):
-    phonemes = [phon for syll in word.syllables for phon in syll.phonemes]
+    phonemes = [phon for syllable in word for phon in syllable]
 
     for phon_1, phon_2 in zip(phonemes[:-1], phonemes[1:]):
         if "".join([phon_1.id, phon_2.id]) not in valid_bigrams:
@@ -88,7 +88,7 @@ def check_bigram_stats(word: Word, valid_bigrams: Register[str, Syllable]):
 
 
 def check_trigram_stats(word: Word, valid_trigrams: Register[str, Syllable]):
-    phonemes = [phon for syll in word.syllables for phon in syll.phonemes]
+    phonemes = [phon for syllable in word for phon in syllable]
 
     for phon_1, phon_2, phon_3 in zip(phonemes[:-2], phonemes[1:-1], phonemes[2:]):
         if "".join([phon_1.id, phon_2.id, phon_3.id]) not in valid_trigrams:
@@ -98,13 +98,13 @@ def check_trigram_stats(word: Word, valid_trigrams: Register[str, Syllable]):
 
 
 def filter_gram_stats(words: Register[str, Word],
-                      bigrams: Optional[Union[str, PathLike]] = IPA_BIGRAMS_DEFAULT_PATH,
-                      trigrams: Optional[Union[str, PathLike]] = IPA_TRIGRAMS_DEFAULT_PATH,
-                      p_val_uniform_bigrams: float = 0.05,
-                      p_val_uniform_trigrams: float = 0.05) -> Register[str, Word]:
+                      bigrams_path: Optional[Union[str, PathLike]] = IPA_BIGRAMS_DEFAULT_PATH,
+                      trigrams_path: Optional[Union[str, PathLike]] = IPA_TRIGRAMS_DEFAULT_PATH,
+                      p_val_uniform_bigrams: float = None,
+                      p_val_uniform_trigrams: float = None) -> Register[str, Word]:
     logging.info("SELECT WORDS WITH UNIFORM BIGRAM AND NON-ZERO TRIGRAM LOG-PROBABILITY OF OCCURRENCE IN THE CORPUS")
 
-    if not bigrams and not trigrams:
+    if not bigrams_path and not trigrams_path:
         logging.info("Nothing to do. Please supply bigrams and/or trigrams path")
         return words
 
@@ -112,9 +112,9 @@ def filter_gram_stats(words: Register[str, Word],
 
     filtered_words = Register(**words)
 
-    if bigrams:
-        bigrams: Register[str, Syllable] = read_bigrams(bigrams)
-        if p_val_uniform_bigrams > 0.:
+    if bigrams_path:
+        bigrams: Register[str, Syllable] = read_bigrams(bigrams_path)
+        if p_val_uniform_bigrams > 0. and p_val_uniform_bigrams is not None:
             bigrams = Register({
                 k: bigram for k, bigram in bigrams.items() if bigram.info["p_unif"] > p_val_uniform_bigrams
             })
@@ -122,9 +122,9 @@ def filter_gram_stats(words: Register[str, Word],
         filtered_words_dict = {word.id: word for word in filtered_words if check_bigram_stats(word, bigrams)}
         filtered_words = Register(**filtered_words_dict)
 
-    if trigrams:
-        trigrams: Register[str, Syllable] = read_trigrams(trigrams)
-        if p_val_uniform_trigrams > 0.:
+    if trigrams_path:
+        trigrams: Register[str, Syllable] = read_trigrams(trigrams_path)
+        if p_val_uniform_trigrams > 0. and p_val_uniform_trigrams is not None:
             trigrams = Register({
                 k: trigram for k, trigram in trigrams.items() if trigram.info["p_unif"] > p_val_uniform_trigrams
             })

@@ -15,7 +15,7 @@ from arc.core.base_types import Register, RegisterType
 from arc.core.syllable import Syllable
 from arc.core.word import Word
 from arc.core.phoneme import PHONEME_FEATURE_LABELS, Phoneme
-from arc.tpc.lexicon import LexiconType
+from arc.controls.lexicon import LexiconType
 
 
 def get_data_path(fname):
