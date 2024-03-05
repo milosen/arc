@@ -114,9 +114,9 @@ def filter_gram_stats(words: Register[str, Word],
 
     if bigrams_path:
         bigrams: Register[str, Syllable] = read_bigrams(bigrams_path)
-        if p_val_uniform_bigrams > 0. and p_val_uniform_bigrams is not None:
+        if p_val_uniform_bigrams is not None:
             bigrams = Register({
-                k: bigram for k, bigram in bigrams.items() if bigram.info["p_unif"] > p_val_uniform_bigrams
+                k: bigram for k, bigram in bigrams.items() if bigram.info["p_unif"] < p_val_uniform_bigrams
             })
         info.update({"bigram_pval": p_val_uniform_bigrams, "bigrams_count": len(bigrams)})
         filtered_words_dict = {word.id: word for word in filtered_words if check_bigram_stats(word, bigrams)}
@@ -124,9 +124,9 @@ def filter_gram_stats(words: Register[str, Word],
 
     if trigrams_path:
         trigrams: Register[str, Syllable] = read_trigrams(trigrams_path)
-        if p_val_uniform_trigrams > 0. and p_val_uniform_trigrams is not None:
+        if p_val_uniform_trigrams is not None:
             trigrams = Register({
-                k: trigram for k, trigram in trigrams.items() if trigram.info["p_unif"] > p_val_uniform_trigrams
+                k: trigram for k, trigram in trigrams.items() if trigram.info["p_unif"] < p_val_uniform_trigrams
             })
         info.update({"trigram_pval": p_val_uniform_trigrams, "trigrams_count": len(trigrams)})
         filtered_words_dict = {word.id: word for word in filtered_words if check_trigram_stats(word, trigrams)}

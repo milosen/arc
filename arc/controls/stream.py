@@ -66,6 +66,95 @@ def pseudo_rand_tp_random(n_words=4, n_sylls_per_word=3):
     # TODO: make faster and easier to read
     n_sylls_total = n_sylls_per_word * n_words  # number of syllables in a lexicon
     n_repetitions = n_sylls_total * 4  # number of repetitions in a trial
+    n_loop = 1000  # ???
+    while True:
+        p1 = np.repeat(range(n_sylls_total), math.ceil(n_repetitions / int(n_sylls_total / n_words))).tolist()
+        p2 = np.repeat(range(n_sylls_total), math.ceil(n_repetitions / int(n_sylls_total / n_words))).tolist()
+        p3 = np.repeat(range(n_sylls_total), math.ceil(n_repetitions / int(n_sylls_total / n_words))).tolist()
+        M = np.zeros((n_sylls_total, n_sylls_total))
+        mask = (np.ones((n_sylls_total, n_sylls_total)) - np.diag(np.ones(n_sylls_total))).astype(bool)
+        v = []
+        for _ in range(n_repetitions):
+            if not v:
+                p = random.sample(range(n_sylls_total), n_sylls_total)
+                m = np.array(transitional_p_matrix(p))
+            else:
+                i_loop = 0
+                while i_loop < n_loop:
+                    try:
+                        s = v[-1]
+                        p = []
+                        m = np.zeros((n_sylls_total, n_sylls_total))
+                        N = np.copy(M)
+                        for idx in range(n_sylls_total):
+                            t = list(np.where(N[s] == N[s].min())[0])
+                            t.remove(s)
+                            if idx in list(range(n_sylls_total)[0::3]):
+                                t = [i for i in p1 if i in t and i not in p]
+                                if not t and i_loop > n_loop/100:
+                                    t = list(np.where(N[s] == np.sort(N[s])[1])[0])
+                                    t = [i for i in p1 if i in t and i not in p]
+                                if not t and i_loop > n_loop/10:
+                                    t = [i for i in p1 if i != s]                        
+                                    t = [i for i in p1 if i in t and i not in p]
+                                x = np.array(list(map(list(t).count, set(t))))
+                                n = [list(set(t))[i] for i in list(np.where(x == x.max())[0])]
+                                p += random.sample(n, 1)
+                            elif idx in list(range(n_sylls_total)[1::3]):
+                                t = [i for i in p2 if i in t and i not in p]
+                                if not t and i_loop > n_loop/100:
+                                    t = list(np.where(N[s] == np.sort(N[s])[1])[0])
+                                    t = [i for i in p2 if i in t and i not in p]
+                                if not t and i_loop > n_loop/10:
+                                    t = [i for i in p2 if i != s]
+                                    t = [i for i in p2 if i in t and i not in p]
+                                x = np.array(list(map(list(t).count, set(t))))
+                                n = [list(set(t))[i] for i in list(np.where(x == x.max())[0])]
+                                p += random.sample(n, 1)
+                            elif idx in list(range(n_sylls_total)[2::3]):
+                                t = [i for i in p3 if i in t and i not in p]
+                                if not t and i_loop > n_loop/100:
+                                    t = list(np.where(N[s] == np.sort(N[s])[1])[0])
+                                    t = [i for i in p3 if i in t and i not in p]
+                                if not t and i_loop > n_loop/10:
+                                    t = [i for i in p3 if i != s]
+                                    t = [i for i in p3 if i in t and i not in p]
+                                x = np.array(list(map(list(t).count, set(t))))
+                                n = [list(set(t))[i] for i in list(np.where(x == x.max())[0])]
+                                p += random.sample(n, 1)    
+                            m[s][p[idx]] = m[s][p[idx]] + 1
+                            s = p[-1]
+                            N += m
+                        break
+                    except:
+                        i_loop += 1
+            if len(p) == n_sylls_total:
+                M += m
+                v += p
+            else:
+                break
+            if all(i in p1 
+                   for i in p[0::3]) and all(i in p2 
+                                             for i in p[1::3]) and all(i in p3 
+                                                                       for i in p[2::3]):
+                for i in range(n_words):
+                    p1.remove(p[0::3][i])
+                    p2.remove(p[1::3][i])
+                    p3.remove(p[2::3][i])
+            else:
+                break
+        if all(np.diagonal(M) == np.zeros(n_sylls_total)) and len(v) == n_sylls_total * n_repetitions:
+            if M[mask].min() == math.floor(n_repetitions * n_sylls_total / len(M[mask])):
+                if M[mask].max() == math.ceil(n_repetitions * n_sylls_total / len(M[mask])):
+                    M = np.array(transitional_p_matrix(v))
+                    break
+    return v, M
+
+
+def pseudo_rand_tp_random_position_controlled(n_words=4, n_sylls_per_word=3):
+    # TODO: make faster and easier to read
+    n_sylls_total = n_sylls_per_word * n_words  # number of syllables in a lexicon
+    n_repetitions = n_sylls_total * 4  # number of repetitions in a trial
     P = [list(range(i, n_sylls_total, n_sylls_per_word)) for i in range(n_sylls_per_word)]
     I = list(range(n_sylls_per_word))
     B = I[:]
@@ -166,6 +255,9 @@ def sample_syllable_randomization(
         rand_func = pseudo_rand_tp_struct
     elif tp_mode == "position_controlled":
         elements = [syllable for word in lexicon for syllable in word]
+        rand_func = pseudo_rand_tp_random_position_controlled
+    elif tp_mode == "random":
+        elements = [syllable for word in lexicon for syllable in word]
         rand_func = pseudo_rand_tp_random
     else:
         raise ValueError(f"tp_mode '{tp_mode}' unknown.")
@@ -240,6 +332,50 @@ def make_stream_from_words(words: Register[str, Word],
 
         if maybe_stream:
             return maybe_stream
+
+
+def make_streams(words: Register[str, Word],
+                            n_words: int = 4,
+                            max_word_overlap: int = 1,
+                            max_lexicons: int = 10,
+                            max_rhythmicity=0.1,
+                            max_tries_randomize=10) -> Tuple:
+    logging.info("Building streams from a single lexicon...")
+
+    # pairwise lexicon generation
+    for lexicon_1 in make_lexicon_generator(words=words, n_words=n_words,
+                                            max_overlap=max_word_overlap, max_yields=max_lexicons):
+
+        maybe_stream_1_words: Optional[StreamType] = make_stream_from_lexicon(lexicon_1,
+                                                                              max_rhythmicity=max_rhythmicity,
+                                                                              max_tries_randomize=max_tries_randomize,
+                                                                              tp_mode="word_structured")
+
+        if not maybe_stream_1_words:
+            logging.info("Dropping Lexicons because no good word-randomized stream for Lexicon 1 was found.")
+            continue
+
+        maybe_stream_1_sylls: Optional[StreamType] = make_stream_from_lexicon(lexicon_1,
+                                                                              max_rhythmicity=max_rhythmicity,
+                                                                              max_tries_randomize=max_tries_randomize,
+                                                                              tp_mode="position_controlled")
+
+        if not maybe_stream_1_sylls:
+            logging.info("Dropping Lexicons because no good syllable-randomized stream for Lexicon 1 was found.")
+            continue
+
+        maybe_stream_1_random: Optional[StreamType] = make_stream_from_lexicon(lexicon_1,
+                                                                               max_rhythmicity=max_rhythmicity,
+                                                                               max_tries_randomize=max_tries_randomize,
+                                                                               tp_mode="random")
+
+        if not maybe_stream_1_random:
+            logging.info("Dropping Lexicons because no good syllable-randomized stream for Lexicon 1 was found.")
+            continue
+
+        return maybe_stream_1_words, maybe_stream_1_sylls, maybe_stream_1_random
+
+    return tuple()
 
 
 def make_compatible_streams(words: Register[str, Word],
