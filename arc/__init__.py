@@ -4,11 +4,13 @@ from tqdm import TqdmExperimentalWarning
 
 from .io import load_phonemes, load_syllables, load_words, load_lexicons
 
-from .core.word import Word, WordType, make_words
-from .core.syllable import Syllable, SyllableType, make_feature_syllables
+from .core.word import Word, WordType
+from .core.syllable import Syllable, SyllableType
 from .core.phoneme import Phoneme, PhonemeType
 
-from .controls.stream import Stream, StreamType, make_streams, make_compatible_streams, make_stream_from_words
-from .controls.lexicon import LexiconType, make_lexicon_generator, make_lexicons_from_words, word_overlap_matrix
+from .controls.stream import Stream, StreamType
+from .controls.lexicon import LexiconType
+
+from .api import make_syllables, make_words, make_lexicons, make_streams
 
 warnings.filterwarnings("ignore", category=TqdmExperimentalWarning)

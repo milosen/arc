@@ -3,14 +3,13 @@ import logging
 import math
 from copy import copy
 from functools import partial
-from typing import Generator, Tuple, Set
+from typing import Generator, Set
 
 import numpy as np
 
-from arc.core.word import word_overlap_matrix, WordType
-from arc.core.syllable import SyllableType
 from arc.core.base_types import Register, RegisterType
-
+from arc.core.syllable import SyllableType
+from arc.core.word import word_overlap_matrix, WordType
 
 LexiconType = RegisterType
 
@@ -34,9 +33,10 @@ def make_lexicon_generator(
         words: RegisterType,
         n_words: int = 4,
         max_overlap: int = 1,
-        max_yields: int = 10) -> Generator[LexiconType, None, None]:
+        max_yields: int = 1_000_000,
+        lag_of_interest: int = 1) -> Generator[LexiconType, None, None]:
 
-    overlap = word_overlap_matrix(words)
+    overlap = word_overlap_matrix(words, lag_of_interest=lag_of_interest)
     options = dict((k, v) for k, v in locals().items() if not k == 'words' and not k == 'overlap')
     logging.info(f"GENERATE MIN OVERLAP LEXICONS WITH OPTIONS {options}")
     yields = 0
@@ -106,10 +106,3 @@ def make_lexicon_generator(
 
                 if yields == max_yields:
                     return
-
-
-def make_lexicons_from_words(
-        words: RegisterType, n_lexicons: int = 5, n_words: int = 4, max_overlap: int = 1,
-) -> Tuple[LexiconType, ...]:
-    lexicon_generator = make_lexicon_generator(words, n_words=n_words, max_yields=n_lexicons, max_overlap=max_overlap)
-    return tuple(lexicon for lexicon in lexicon_generator)
