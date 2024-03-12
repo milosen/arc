@@ -1,12 +1,12 @@
 import logging
 from copy import copy
 import random
-from typing import Optional, Literal, List
+from typing import Optional, Literal, List, Iterable
 
 from tqdm.rich import tqdm
 
 from arc.controls.stream import StreamType
-from arc.controls.lexicon import LexiconType, make_lexicon_generator
+from arc.controls.lexicon import LexiconType, make_lexicon_generator, sample_random_lexicon
 from arc.controls.filter import filter_common_phoneme_words, filter_gram_stats, filter_uniform_syllables, \
     filter_common_phoneme_syllables
 from arc.controls.stream import make_stream_from_lexicon
@@ -96,16 +96,26 @@ def make_lexicons(
     max_overlap: int = 1,
     lag_of_interest: int = 1,
     max_word_matrix: int = 200,
-    unique_words: bool = False
+    unique_words: bool = False,
+    control_features: bool = True
 ) -> List[LexiconType]:
 
     lexicons = []
 
-    for lexicon in make_lexicon_generator(
+    if control_features:
+        lexicon_generator = make_lexicon_generator(
             words.get_subset(max_word_matrix),
             n_words=n_words,
             max_overlap=max_overlap,
-            lag_of_interest=lag_of_interest):
+            lag_of_interest=lag_of_interest
+        )
+    else:
+        lexicon_generator: Iterable = sample_random_lexicon(
+            words.get_subset(max_word_matrix),
+            n_words=n_words,
+        )
+
+    for lexicon in lexicon_generator:
 
         has_repeating_words = False
         if unique_words:

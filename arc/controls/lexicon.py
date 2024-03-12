@@ -1,6 +1,7 @@
 import itertools
 import logging
 import math
+import random
 from copy import copy
 from functools import partial
 from typing import Generator, Set
@@ -12,6 +13,7 @@ from arc.core.syllable import SyllableType
 from arc.core.word import word_overlap_matrix, WordType
 
 LexiconType = RegisterType
+Lexicon = Register
 
 
 def word_as_syllable_set(word: WordType) -> Set[SyllableType]:
@@ -106,3 +108,21 @@ def make_lexicon_generator(
 
                 if yields == max_yields:
                     return
+
+
+def sample_random_lexicon(
+    words: RegisterType,
+    n_words: int = 4
+) -> Generator[LexiconType, None, None]:
+    while True:
+        random_word_indexes = random.sample(range(len(words)), n_words)
+        lexicon = Register({words[idx].id: words[idx] for idx in random_word_indexes})
+        lexicon.info = copy(words.info)
+
+        sylls = [syll.id for word in lexicon for syll in word]
+        intersection = (len(set(sylls)) == len(sylls))
+
+        if intersection:
+            continue
+
+        yield lexicon

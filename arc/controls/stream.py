@@ -343,7 +343,7 @@ def make_stream_from_lexicon(lexicon: Register[str, Word],
         patterns = get_oscillation_patterns(len(lexicon[0].syllables))
         rhythmicity_indexes = compute_rhythmicity_index_sylls_stream(sylls_stream, patterns)
 
-        if (max(rhythmicity_indexes) <= max_rhythmicity) or max_rhythmicity is None:
+        if max_rhythmicity is None or (max(rhythmicity_indexes) <= max_rhythmicity):
             i_labels = enumerate(lexicon.info["syllable_feature_labels"])
             feature_labels = [f"phon_{i_phon+1}_{label}" for i_phon, labels in i_labels for label in labels]
 
