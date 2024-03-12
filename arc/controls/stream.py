@@ -16,6 +16,52 @@ StreamType = WordType
 Stream = Word
 
 
+def shuffled_struct_stream(n_words=4, n_sylls_per_word=3, n_repetitions=4):
+    # TODO: make faster and easier to read
+    n_sylls_total = n_sylls_per_word * n_words  # number of syllables in a lexicon
+    n_iters = n_sylls_total * n_repetitions  # number of repetitions in a trial
+    syll_id = np.arange(n_sylls_total).reshape((n_words, int(n_sylls_total / n_words)))
+    while True:
+        stream = np.repeat(syll_id, n_iters, axis=0)
+        np.random.shuffle(stream)
+        v = list(stream)
+        for n in range(1, len(v)-1):
+            if v[n][0] == v[n-1][0]:
+                k = v[n:]
+                l = [i for i, el in enumerate(k) if el[0] != v[n][0]]
+                if not l:
+                    continue
+                else:
+                    l = l[0]
+                v[n] = v[n+l]
+                v[n+l] = v[n-1]
+        x = [i[0] for i in v]
+        check = [sum(1 for _ in group) for _, group in itertools.groupby(x)]
+        if all(i == 1 for i in check):
+            break
+    s = [j for k in v for j in k]
+    return s
+
+
+def shuffled_random_stream(n_words=4, n_sylls_per_word=3, n_repetitions=4):
+    # TODO: make faster and easier to read
+    n_sylls_total = n_sylls_per_word * n_words  # number of syllables in a lexicon
+    n_iters = n_sylls_total * n_repetitions  # number of repetitions in a trial:
+    syll_id = np.arange(n_sylls_total)
+    while True:
+        stream = np.repeat(syll_id, n_iters)
+        np.random.shuffle(stream)
+        v = list(stream)
+        for n in range(1, len(v)-1):
+            if v[n] == v[n-1]:
+                v[n] = v[n+1]
+                v[n+1] = v[n-1]
+        check = [sum(1 for _ in group) for _, group in itertools.groupby(v)]
+        if all(i == 1 for i in check):
+            break
+    return v
+
+
 def transitional_p_matrix(v):
     # TODO: make (faster and) easier to read
     n = 1 + max(v)
