@@ -1,8 +1,14 @@
 # ARC
 ARC: A tool for creating Artificial languages with Rhythmicity Control
 
+![ARC Flowchart](ARC_Flowchart.pdf)
+
 ## Setup
-Welcome to ARC!
+Welcome to ARC! 
+
+This is code for the paper (insert paper).
+
+The following describes how you can set up the software and run the experiments from the paper.
 
 ### Optional: create a new virtual environment
 Create a new virtual environment, e.g. using anaconda
@@ -15,18 +21,18 @@ conda activate test_arc
 ```
 
 ### Install Package
-You can either install ARC directly from git
-```shell
-pip install git+https://github.com/milosen/arc.git
-```
-
-Or clone this repository and install in editable mode:
+The simplest is to clone this repository and install ARC in editable mode:
 ```shell
 pip install -e .
 ```
 
-## Tutorials
-It is recommended to run the tutorial notebooks in the `notebooks/` directory:
+You can can also install ARC directly from git as a python package
+```shell
+pip install git+https://github.com/milosen/arc.git
+```
+
+## Run the code from the paper
+
 Install jupyter
 ```shell
 pip install jupyter
@@ -36,10 +42,12 @@ pip install jupyter
 python -m ipykernel install --user --name=arc
 ```
 
-Run
+Start jupyter
 ```shell
 jupyter notebook
 ```
-
-If you did not clone the repository, download the contents of the `notebooks/` directory and select one of the tutorial notbooks from inside the jupyter session.
+and select the notebook `controlled_stream_generation.ipynb`.
 Don't forget to select the `arc` kernel in the jupyter session.
+
+## Optional: ARC's type system
+If you want to adapt ARC to your own research, you'll probably want to take a look at `arc_types.ipynb`.
