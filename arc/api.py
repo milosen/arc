@@ -3,7 +3,7 @@ from copy import copy
 import random
 from typing import Optional, Literal, List, Iterable
 
-from tqdm.rich import tqdm
+from tqdm import tqdm
 
 from arc.controls.stream import StreamType
 from arc.controls.lexicon import LexiconType, make_lexicon_generator, sample_random_lexicon
@@ -17,15 +17,23 @@ from arc.io import read_syllables_corpus
 
 
 def make_syllables(phonemes: RegisterType, phoneme_pattern: str = "cV",
-                   unigram_control: bool = True, unigram_alpha: float = 0.05) -> RegisterType:
+                   unigram_control: bool = True,
+                   language_control: bool = True, 
+                   language_alpha: Optional[float] = 0.05,
+                   from_format: Literal["ipa", "xsampa"] = "xsampa",
+                   lang: str = "deu") -> RegisterType:
 
     syllables = make_feature_syllables(phonemes, phoneme_pattern=phoneme_pattern)
 
+    if language_control:
+        german_syllable_corpus = read_syllables_corpus(from_format=from_format, lang=lang)
+        syllables = syllables.intersection(german_syllable_corpus)
+    
+        if language_alpha is not None:
+            syllables = filter_uniform_syllables(syllables, alpha=language_alpha)
+    
     if unigram_control:
-        german_syllable_corpus = read_syllables_corpus()
-        syllables_valid_german = syllables.intersection(german_syllable_corpus)
-        syllables_german_filtered = filter_uniform_syllables(syllables_valid_german, alpha=unigram_alpha)
-        syllables = filter_common_phoneme_syllables(syllables_german_filtered)
+        syllables = filter_common_phoneme_syllables(syllables)
 
     return syllables
 
@@ -75,9 +83,6 @@ def make_words(syllables: RegisterType,
     words_register = Register(words)
     words_register.info = copy(syllables.info)
 
-    if positional_control:
-        words_register = filter_common_phoneme_words(words_register, position=0)
-
     words_register = filter_gram_stats(
         words_register,
         bigram_control=bigram_control,
@@ -85,6 +90,10 @@ def make_words(syllables: RegisterType,
         p_val_uniform_bigrams=bigram_alpha,
         p_val_uniform_trigrams=trigram_alpha
     )
+
+    if positional_control:
+        print("positional control...")
+        words_register = filter_common_phoneme_words(words_register)
 
     return words_register
 
@@ -140,15 +149,15 @@ def make_streams(
         num_repetitions: int = 4,
         max_tries_randomize: int = 10,
         n_lexicon_streams: int = 1,
-        tp_modes: tuple = ("random", "word_structured", "position_controlled")
+        tp_modes: tuple = ("random", "word_structured", "position_controlled"),
+        require_all_tp_modes: bool = True
 ) -> RegisterType:
     logging.info("Building streams from lexicons ...")
 
     streams = {}
-    n_lex_streams = 0
 
     for i, lexicon in enumerate(lexicons):
-        found_all = True
+        found_all_tp_modes = True
         new_streams = {}
         for tp_mode in tp_modes:
             stream_id = f"Lexicon-{'-'.join(w.id for w in lexicon)}_TP-{tp_mode}"
@@ -164,15 +173,11 @@ def make_streams(
             if maybe_stream:
                 new_streams[stream_id] = maybe_stream
             else:
-                found_all = False
+                found_all_tp_modes = False
                 break
 
-        if found_all:
+        if found_all_tp_modes or (require_all_tp_modes == False):
             streams.update(new_streams)
-            n_lex_streams += 1
-
-        if n_lex_streams >= n_lexicon_streams:
-            break
 
     streams_register = Register(**streams)
 

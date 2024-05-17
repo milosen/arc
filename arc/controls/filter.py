@@ -6,6 +6,7 @@ from typing import Iterable, Dict, Union, Optional
 
 import numpy as np
 from scipy import stats
+from tqdm import tqdm
 
 from arc.io import read_phoneme_corpus, read_bigrams, read_trigrams, IPA_SEG_DEFAULT_PATH, IPA_BIGRAMS_DEFAULT_PATH, \
     IPA_TRIGRAMS_DEFAULT_PATH
@@ -60,23 +61,30 @@ def get_rare_phonemes(syllables: Iterable[Syllable], phonemes: Dict[str, Phoneme
     return rare_onset_phonemes
 
 
-def filter_common_phoneme_words(words, position: int = 0, ipa_seg_path: Union[str, PathLike] = IPA_SEG_DEFAULT_PATH):
+def filter_common_phoneme_words(words, position: Optional[int] = None, ipa_seg_path: Union[str, PathLike] = IPA_SEG_DEFAULT_PATH):
     logging.info("EXCLUDE WORDS WITH LOW (ONSET) SYLLABLE PROBABILITY")
     native_phonemes = read_phoneme_corpus(ipa_seg_path=ipa_seg_path)
     list_syllables = [syllable for word in words for syllable in word]
 
     rare_phonemes = get_rare_phonemes(list_syllables, native_phonemes)
 
-    # e.g. word[syll_idx=0][phon_idx=0] means first phoneme in first syllable of the word
-    if position == -1:
-        syll_idx, phon_idx = -1, -1
+    if position is None:
+        reg = Register({}, _info=copy(words.info))
+        for word in words:
+            if all(ph not in rare_phonemes for syll in word for ph in syll):
+                reg.append(word)
+        return reg
     else:
-        phons_in_syll = len(words[0][0].phonemes)
-        syll_idx, phon_idx = position // phons_in_syll, position % phons_in_syll
+        # e.g. word[syll_idx=0][phon_idx=0] means first phoneme in first syllable of the word
+        if position == -1:
+            syll_idx, phon_idx = -1, -1
+        else:
+            phons_in_syll = len(words[0][0].phonemes)
+            syll_idx, phon_idx = position // phons_in_syll, position % phons_in_syll
 
-    return Register({
-        word.id: word for word in words if word[syll_idx][phon_idx] not in rare_phonemes
-    }, _info=copy(words.info))
+        return Register({
+            word.id: word for word in words if word[syll_idx][phon_idx] not in rare_phonemes
+        }, _info=copy(words.info))
 
 
 def check_bigram_stats(word: Word, valid_bigrams: Register[str, Syllable]):
@@ -113,6 +121,7 @@ def filter_gram_stats(words: Register[str, Word],
     filtered_words = Register(**words)
 
     if bigram_control:
+        print("bigram control...")
         assert os.path.exists(bigrams_path), "Bigram Control requires valid path to bigrams file"
         bigrams: Register[str, Syllable] = read_bigrams(bigrams_path)
         if p_val_uniform_bigrams is not None:
@@ -124,6 +133,7 @@ def filter_gram_stats(words: Register[str, Word],
         filtered_words = Register(**filtered_words_dict)
 
     if trigram_control:
+        print("trigram control...")
         assert os.path.exists(trigrams_path), "Trigram Control requires valid path to trigrams file"
         trigrams: Register[str, Syllable] = read_trigrams(trigrams_path)
         if p_val_uniform_trigrams is not None:

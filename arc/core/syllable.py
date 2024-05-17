@@ -5,7 +5,6 @@ from functools import reduce
 from typing import List, Union, TypeVar, Dict, Any
 
 from pydantic import BaseModel
-from tqdm.rich import tqdm
 
 from arc.core.base_types import Register, RegisterType
 from arc.core.phoneme import Phoneme
@@ -41,11 +40,32 @@ def add_phonotactic_features(syllable_phonemes: List[Phoneme]):
     return syll_feats
 
 
+def syllable_from_phonemes(phonemes: RegisterType, phoneme_combination: List[str], syll_feature_labels: List[List[str]]):
+    syll_id = "".join(phoneme_combination)
+    syll_phons = []
+    syll_features = []
+    for p, phoneme_feature_labels in zip(phoneme_combination, syll_feature_labels):
+        phoneme: Phoneme = phonemes[p]
+        syll_phons.append(phoneme)
+        for label in phoneme_feature_labels:
+            if phoneme.get_binary_feature(label):
+                syll_features.append(1)
+            else:
+                syll_features.append(0)
+
+    syllable = Syllable(
+        id=syll_id, info={"binary_features": syll_features,
+                          "phonotactic_features": add_phonotactic_features(syll_phons)},
+        phonemes=syll_phons
+    )
+
+    return syllable
+
+
 def make_feature_syllables(
     phonemes: RegisterType,
     phoneme_pattern: Union[str, list] = "cV",
     max_combinations: int = 1_000_000,
-    progress_bar: bool = False,
 ) -> RegisterType:
     """Generate syllables form feature-phonemes. Only keep syllables that follow the phoneme pattern"""
 
@@ -73,10 +93,9 @@ def make_feature_syllables(
             else:
                 multi_consonants.append(phoneme.id)
         else:
-            if len(phoneme.id) == 2:
-                if phoneme.get_binary_feature('long'):
+            if len(phoneme.id) == 2 and phoneme.get_binary_feature('long'):
                     long_vowels.append(phoneme.id)
-                else:
+            if len(phoneme.id) == 1 and not phoneme.get_binary_feature('long'):
                     short_vowels.append(phoneme.id)
 
     phonemes_mapping = {"c": single_consonants, "C": multi_consonants, "v": short_vowels, "V": long_vowels}
@@ -95,28 +114,9 @@ def make_feature_syllables(
             break
         list_of_combinations.append(phoneme_combination)
 
-    if progress_bar:
-        list_of_combinations = tqdm(list_of_combinations)
-
     for phoneme_combination in list_of_combinations:
-        syll_id = "".join(phoneme_combination)
-        syll_phons = []
-        syll_features = []
-        for p, phoneme_feature_labels in zip(phoneme_combination, syll_feature_labels):
-            phoneme: Phoneme = phonemes[p]
-            syll_phons.append(phoneme)
-            for label in phoneme_feature_labels:
-                if phoneme.get_binary_feature(label):
-                    syll_features.append(1)
-                else:
-                    syll_features.append(0)
-
-        syllable = Syllable(
-            id=syll_id, info={"binary_features": syll_features,
-                              "phonotactic_features": add_phonotactic_features(syll_phons)},
-            phonemes=syll_phons
-        )
-        syllables_dict[syll_id] = syllable
+        syllable = syllable_from_phonemes(phonemes, phoneme_combination, syll_feature_labels)
+        syllables_dict[syllable.id] = syllable
 
     new_info = copy(phonemes.info)
     new_info.update({"syllable_feature_labels": syll_feature_labels,  "syllable_type": phoneme_pattern})
