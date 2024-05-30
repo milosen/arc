@@ -23,9 +23,9 @@ setup(
         "rich",
         "tqdm",
         "pydantic",
-        "pytest"
-        "pingouin"
-        "matplotlib"
+        "pytest",
+        "pingouin",
+        "matplotlib",
     ],
     include_package_data=True,
     package_data={'arc': ['data/*', 'data/example_corpus/*']},
