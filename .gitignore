@@ -159,9 +159,9 @@ cython_debug/
 #  option (not recommended) you can uncomment the following to ignore the entire idea folder.
 .idea/
 
-arc_results/
+# ARC specific
+results/
+titone/
 ssml/
-
 # we use json only for intermediate data storage
 *.json
-results/

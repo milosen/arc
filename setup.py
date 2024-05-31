@@ -20,7 +20,6 @@ setup(
         "pandas",
         "numpy",
         "scipy",
-        "rich",
         "tqdm",
         "pydantic",
         "pytest",

@@ -1,0 +1,18 @@
+S01_Audio_Synthesis_Guide.txt
+
+S00_00_Syllables_to_SSML.py converts the Syllables Registers to text files including phoneme SSML tags. The output files are stored in /01_Syllables/01_Tags.
+
+These text files were copied to /01_Syllables/02_Gtts for automated speech synthesis. The output wav files are stored in /01_Syllables/02_Gtts.
+
+Auditory inspection of the wav files sporadically revealed syllables mispronunciations. On these circumstances, the text files were edited and stored in /01_Syllables/03_Edits.
+
+Occasionally, the audio files produced via GTTS also had to be edited manually in Praat in order to isolate the syllable at hand. All corrected wav files are stored in /01_Syllables/04_Audios.
+
+A wav file containing 10 ms of silence is extracted from one audio file to adjust syllable duration in the next step. This file is stored in /01_Syllables/05_Silence.
+
+S00_02_Audio_Editing.praat performs an automated adjustment of syllable duration and sound amplitude equalization.
+Adjusted syllables wav files are stored in /01_Syllables/06_Sounds.
+
+S00_03_Syllables_to_Streams.py concatenates the syllables wav files into streams, according to best_lexicon.txt
+
+S00_04_Streams_to_Spectra.m computes and plots the envelope spectra of the audio streams.
