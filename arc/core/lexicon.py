@@ -4,23 +4,25 @@ import math
 import random
 from copy import copy
 from functools import partial
-from typing import Generator, Set
+from typing import Generator, Iterable, Set, List
 
 import numpy as np
 
-from arc.core.base_types import Register, RegisterType
-from arc.core.syllable import SyllableType
-from arc.core.word import word_overlap_matrix, WordType
+from arc.types.base_types import Register, RegisterType
+from arc.types.syllable import SyllableType
+from arc.types.word import WordType, Word
+from arc.types.lexicon import Lexicon, LexiconType
 
-LexiconType = RegisterType
-Lexicon = Register
+from arc.core.word import word_overlap_matrix
+
+logger = logging.getLogger(__name__)
 
 
 def word_as_syllable_set(word: WordType) -> Set[SyllableType]:
     return set(syllable.id for syllable in word)
 
 
-def check_no_syllable_overlap(words, word_index_pair):
+def check_no_syllable_overlap(words: RegisterType, word_index_pair):
     index_word_1, index_word_2 = set(word_index_pair)
 
     syllables_word_1 = word_as_syllable_set(words[index_word_1])
@@ -36,11 +38,11 @@ def make_lexicon_generator(
         n_words: int = 4,
         max_overlap: int = 1,
         max_yields: int = 1_000_000,
-        lag_of_interest: int = 1) -> Generator[LexiconType, None, None]:
+        lag_of_interest: int = 1) -> Generator[Lexicon, None, None]:
 
     overlap = word_overlap_matrix(words, lag_of_interest=lag_of_interest)
     options = dict((k, v) for k, v in locals().items() if not k == 'words' and not k == 'overlap')
-    logging.info(f"GENERATE MIN OVERLAP LEXICONS WITH OPTIONS {options}")
+    logger.info(f"GENERATE MIN OVERLAP LEXICONS WITH OPTIONS {options}")
     yields = 0
 
     iter_allowed_overlaps = itertools.product(range(max_overlap + 1), range(1, math.comb(n_words, 2)))
@@ -50,7 +52,7 @@ def make_lexicon_generator(
         max_cum_overlap = max_pair_overlap * max_overlap_with_n_words
 
         if max_pair_overlap != 0:
-            logging.warning(
+            logger.warning(
                 f"Increasing allowed overlaps: "
                 f"MAX_PAIRWISE_OVERLAP={max_pair_overlap}, "
                 f"MAX_CUMULATIVE_OVERLAP={max_cum_overlap}"
@@ -113,7 +115,7 @@ def make_lexicon_generator(
 def sample_random_lexicon(
     words: RegisterType,
     n_words: int = 4
-) -> Generator[LexiconType, None, None]:
+) -> Generator[Lexicon, None, None]:
     while True:
         random_word_indexes = random.sample(range(len(words)), n_words)
         lexicon = Register({words[idx].id: words[idx] for idx in random_word_indexes})
@@ -126,3 +128,48 @@ def sample_random_lexicon(
             continue
 
         yield lexicon
+
+
+def make_lexicons(
+    words: RegisterType,
+    n_lexicons: int = 5,
+    n_words: int = 4,
+    max_overlap: int = 1,
+    lag_of_interest: int = 1,
+    max_word_matrix: int = 200,
+    unique_words: bool = False,
+    control_features: bool = True
+) -> List[Lexicon]:
+
+    lexicons = []
+
+    if control_features:
+        lexicon_generator = make_lexicon_generator(
+            words.get_subset(max_word_matrix),
+            n_words=n_words,
+            max_overlap=max_overlap,
+            lag_of_interest=lag_of_interest
+        )
+    else:
+        lexicon_generator: Iterable = sample_random_lexicon(
+            words.get_subset(max_word_matrix),
+            n_words=n_words,
+        )
+
+    for lexicon in lexicon_generator:
+
+        has_repeating_words = False
+        if unique_words:
+            # check uniqueness of words across all lexicons
+            for lexicon_known in lexicons:
+                if set(lexicon_known.keys()).intersection(set(lexicon.keys())):
+                    has_repeating_words = True
+                    break
+
+        if not has_repeating_words:
+            lexicons.append(lexicon)
+
+        if len(lexicons) >= n_lexicons:
+            break
+
+    return lexicons

@@ -4,15 +4,16 @@ from tqdm import TqdmExperimentalWarning
 
 from .io import load_phonemes, load_syllables, load_words, load_lexicons
 
-from .core.base_types import Register, RegisterType, Element
+from .types.base_types import Register, RegisterType, Element
+from .types.phoneme import Phoneme, PhonemeType
+from .types.syllable import Syllable, SyllableType
+from .types.word import Word, WordType
+from .types.lexicon import Lexicon, LexiconType
+from .types.stream import Stream, StreamType
 
-from .core.word import Word, WordType
-from .core.syllable import Syllable, SyllableType
-from .core.phoneme import Phoneme, PhonemeType
-
-from .controls.stream import Stream, StreamType
-from .controls.lexicon import Lexicon, LexiconType
-
-from .api import make_syllables, make_words, make_lexicons, make_streams
+from .core.syllable import make_syllables
+from .core.word import make_words
+from .core.lexicon import make_lexicons
+from .core.stream import make_streams
 
 warnings.filterwarnings("ignore", category=TqdmExperimentalWarning)

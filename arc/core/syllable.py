@@ -2,17 +2,18 @@ import itertools
 import logging
 from copy import copy
 from functools import reduce
-from typing import List, Union, TypeVar, Dict, Any
+from typing import List, Literal, Optional, Union, TypeVar, Dict, Any
 
 from pydantic import BaseModel
 
-from arc.core.base_types import Register, RegisterType
-from arc.core.phoneme import Phoneme
-from arc.core.base_types import Element
+from arc.types.base_types import Register, RegisterType
+from arc.types.phoneme import Phoneme
+from arc.types.base_types import Element
+from arc.types.syllable import Syllable, SyllableType, LABELS_C, LABELS_V
 
-LABELS_C = ['son', 'back', 'hi', 'lab', 'cor', 'cont', 'lat', 'nas', 'voi']
-LABELS_V = ['back', 'hi', 'lo', 'lab', 'tense', 'long']
-N_FEAT = len(LABELS_C) + len(LABELS_V)  # 14
+from arc.io import read_syllables_corpus
+
+from arc.controls.filter import filter_common_phoneme_syllables, filter_uniform_syllables
 
 
 def add_phonotactic_features(syllable_phonemes: List[Phoneme]):
@@ -124,13 +125,23 @@ def make_feature_syllables(
     return Register(syllables_dict, _info=new_info)
 
 
-SyllableType = TypeVar("SyllableType", bound="Syllable")
+def make_syllables(phonemes: RegisterType, phoneme_pattern: str = "cV",
+                   unigram_control: bool = True,
+                   language_control: bool = True, 
+                   language_alpha: Optional[float] = 0.05,
+                   from_format: Literal["ipa", "xsampa"] = "xsampa",
+                   lang: str = "deu") -> RegisterType:
 
+    syllables = make_feature_syllables(phonemes, phoneme_pattern=phoneme_pattern)
 
-class Syllable(Element, BaseModel):
-    id: str
-    phonemes: List[Phoneme]
-    info: Dict[str, Any]
+    if language_control:
+        german_syllable_corpus = read_syllables_corpus(from_format=from_format, lang=lang)
+        syllables = syllables.intersection(german_syllable_corpus)
+    
+        if language_alpha is not None:
+            syllables = filter_uniform_syllables(syllables, alpha=language_alpha)
+    
+    if unigram_control:
+        syllables = filter_common_phoneme_syllables(syllables)
 
-    def get_elements(self):
-        return self.phonemes
+    return syllables

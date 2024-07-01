@@ -11,11 +11,13 @@ import numpy as np
 from scipy import stats
 
 from arc.phonecodes import phonecodes
-from arc.core.base_types import Register, RegisterType
-from arc.core.syllable import Syllable
-from arc.core.word import Word
-from arc.core.phoneme import PHONEME_FEATURE_LABELS, Phoneme
-from arc.controls.lexicon import LexiconType
+from arc.types.base_types import Register, RegisterType
+from arc.types.syllable import Syllable
+from arc.types.word import Word
+from arc.types.phoneme import PHONEME_FEATURE_LABELS, Phoneme
+from arc.types.lexicon import LexiconType
+
+logger = logging.getLogger(__name__)
 
 
 def get_data_path(fname):
@@ -37,7 +39,7 @@ SSML_RESULTS_DEFAULT_PATH = RESULTS_DEFAULT_PATH / "syllables"
 
 def export_speech_synthesiser(syllables: Iterable[Syllable],
                               syllables_dir: Union[str, PathLike] = SSML_RESULTS_DEFAULT_PATH):
-    logging.info("SAVE EACH SYLLABLE TO A TEXT FILE FOR THE SPEECH SYNTHESIZER")
+    logger.info("SAVE EACH SYLLABLE TO A TEXT FILE FOR THE SPEECH SYNTHESIZER")
     os.makedirs(syllables_dir, exist_ok=True)
     c = [s.id[0] for s in syllables]
     v = [s.id[1] for s in syllables]
@@ -63,7 +65,7 @@ def read_phoneme_corpus(
     :param ipa_seg_path:
     :return:
     """
-    logging.info("READ ORDER OF PHONEMES IN WORDS")
+    logger.info("READ ORDER OF PHONEMES IN WORDS")
     with open(ipa_seg_path, "r") as csv_file:
         fdata = list(csv.reader(csv_file, delimiter='\t'))
     phonemes = {}
@@ -94,7 +96,7 @@ def read_syllables_corpus(
         from_format: Literal["ipa", "xsampa"] = "xsampa",
         lang: str = "deu",
 ) -> Register[str, Syllable]:
-    logging.info("READ SYLLABLES, FREQUENCIES AND PROBABILITIES FROM CORPUS AND CONVERT SYLLABLES TO IPA")
+    logger.info("READ SYLLABLES, FREQUENCIES AND PROBABILITIES FROM CORPUS AND CONVERT SYLLABLES TO IPA")
 
     with open(syllables_corpus_path, "r") as csv_file:
         fdata = list(csv.reader(csv_file, delimiter='\t'))
@@ -108,7 +110,7 @@ def read_syllables_corpus(
             syllables_dict[syll_ipa] = Syllable(
                 id=syll_ipa, phonemes=[], info=info, binary_features=[], phonotactic_features=[])
         else:
-            logging.info(
+            logger.info(
                 f"Syllable '{syll_ipa}' with conflicting stats {info} != {syllables_dict[syll_ipa].info}."
             )
             # del syllables_dict[syll_ipa]
@@ -119,7 +121,7 @@ def read_syllables_corpus(
 def read_bigrams(
     ipa_bigrams_path: str = IPA_BIGRAMS_DEFAULT_PATH,
 ) -> Register[str, Syllable]:
-    logging.info("READ BIGRAMS")
+    logger.info("READ BIGRAMS")
 
     with open(ipa_bigrams_path, "r") as csv_file:
         fdata = list(csv.reader(csv_file, delimiter='\t'))
@@ -138,7 +140,7 @@ def read_bigrams(
             # a bigram is not necessarily a syllable but in our type system they are equivalent
             bigrams_dict[bigram] = Syllable(id=bigram, phonemes=[], info=info)
         else:
-            logging.info(
+            logger.info(
                 f"Bigram '{bigram}' with conflicting stats {info} != {bigrams_dict[bigram].info}."
             )
             # del bigrams_dict[bigram]
@@ -149,7 +151,7 @@ def read_bigrams(
 def read_trigrams(
         ipa_trigrams_path: str = IPA_TRIGRAMS_DEFAULT_PATH,
 ) -> Register[str, Syllable]:
-    logging.info("READ TRIGRAMS")
+    logger.info("READ TRIGRAMS")
     fdata = list(csv.reader(open(ipa_trigrams_path, "r"), delimiter='\t'))
 
     freqs = [int(data[0].split(",")[1]) for data in fdata[1:]]
@@ -164,7 +166,7 @@ def read_trigrams(
         if trigram not in trigrams_dict or trigrams_dict[trigram].info == info:
             trigrams_dict[trigram] = Syllable(id=trigram, phonemes=[], info=info)
         else:
-            logging.info(
+            logger.info(
                 f"Trigram '{trigram}' with conflicting stats {info} != {trigrams_dict[trigram].info}."
             )
             # del trigrams_dict[trigram]
@@ -173,7 +175,7 @@ def read_trigrams(
 
 
 def read_phonemes_csv(binary_features_path: str = BINARY_FEATURES_DEFAULT_PATH) -> Register:
-    logging.info("READ MATRIX OF BINARY FEATURES FOR ALL IPA PHONEMES")
+    logger.info("READ MATRIX OF BINARY FEATURES FOR ALL IPA PHONEMES")
 
     with open(binary_features_path, "r") as csv_file:
         fdata = list(csv.reader(csv_file))
@@ -189,7 +191,7 @@ def read_phonemes_csv(binary_features_path: str = BINARY_FEATURES_DEFAULT_PATH) 
         if phon not in phonemes_dict or features == phonemes_dict[phon].info["features"]:
             phonemes_dict[phon] = Phoneme(id=phon, info={"features": features})
         else:
-            logging.info(
+            logger.info(
                 f"Phoneme '{phon}' with conflicting "
                 f"feature entries {features} != {phonemes_dict[phon].info['features']}.")
             # del phonemes_dict[phon]
@@ -217,7 +219,7 @@ def check_german(words: List[Word]):
     #         [do not flag if rule exceptions exist])
     #     '0' OTHERWISE (that is, the item is good)
 
-    logging.info("LOAD WORDS FROM CSV FILE AND SELECT THOSE THAT CANNOT BE MISTAKEN FOR GERMAN WORDS")
+    logger.info("LOAD WORDS FROM CSV FILE AND SELECT THOSE THAT CANNOT BE MISTAKEN FOR GERMAN WORDS")
     with open(os.path.join(RESULTS_DEFAULT_PATH, "words.csv"), 'r') as f:
         fdata = list(csv.reader(f, delimiter='\t'))
     rows = [row[0].split(",") for row in fdata]

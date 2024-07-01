@@ -6,18 +6,21 @@ from typing import Iterable, Dict, Union, Optional
 
 import numpy as np
 from scipy import stats
-from tqdm import tqdm
+
+from arc.types.base_types import Register
+from arc.types.phoneme import Phoneme
+from arc.types.syllable import Syllable
+from arc.types.word import Word
 
 from arc.io import read_phoneme_corpus, read_bigrams, read_trigrams, IPA_SEG_DEFAULT_PATH, IPA_BIGRAMS_DEFAULT_PATH, \
     IPA_TRIGRAMS_DEFAULT_PATH
-from arc.core.base_types import Register
-from arc.core.phoneme import Phoneme
-from arc.core.syllable import Syllable
-from arc.core.word import Word
+
+
+logger = logging.getLogger(__name__)
 
 
 def filter_uniform_syllables(syllables: Register[str, Syllable], alpha: float = 0.05):
-    logging.info("FILTER UNIFORMLY DISTRIBUTED SYLLABLES")
+    logger.info("FILTER UNIFORMLY DISTRIBUTED SYLLABLES")
     freqs = [s.info["freq"] for s in syllables]
     p_vals_uniform = stats.uniform.sf(abs(stats.zscore(np.log(freqs))))
     return Register({k: v for i, (k, v) in enumerate(syllables.items()) if p_vals_uniform[i] > alpha},
@@ -25,7 +28,7 @@ def filter_uniform_syllables(syllables: Register[str, Syllable], alpha: float = 
 
 
 def filter_common_phoneme_syllables(syllables, ipa_seg_path: Union[str, PathLike] = IPA_SEG_DEFAULT_PATH):
-    logging.info("FILTER SYLLABLES WITH COMMON/NATIVE PHONEMES")
+    logger.info("FILTER SYLLABLES WITH COMMON/NATIVE PHONEMES")
     native_phonemes = read_phoneme_corpus(ipa_seg_path=ipa_seg_path)
 
     def is_native(syllable):
@@ -46,7 +49,7 @@ def get_rare_phonemes(syllables: Iterable[Syllable], phonemes: Dict[str, Phoneme
     :param p_threshold:
     :return:
     """
-    logging.info("FIND SYLLABLES THAT ARE RARE AT THE ONSET OF A WORD")
+    logger.info("FIND SYLLABLES THAT ARE RARE AT THE ONSET OF A WORD")
 
     rare_onset_phonemes = []
     for s in syllables:
@@ -62,7 +65,7 @@ def get_rare_phonemes(syllables: Iterable[Syllable], phonemes: Dict[str, Phoneme
 
 
 def filter_common_phoneme_words(words, position: Optional[int] = None, ipa_seg_path: Union[str, PathLike] = IPA_SEG_DEFAULT_PATH):
-    logging.info("EXCLUDE WORDS WITH LOW (ONSET) SYLLABLE PROBABILITY")
+    logger.info("EXCLUDE WORDS WITH LOW (ONSET) SYLLABLE PROBABILITY")
     native_phonemes = read_phoneme_corpus(ipa_seg_path=ipa_seg_path)
     list_syllables = [syllable for word in words for syllable in word]
 
@@ -114,7 +117,7 @@ def filter_gram_stats(words: Register[str, Word],
                       trigrams_path: Optional[Union[str, PathLike]] = IPA_TRIGRAMS_DEFAULT_PATH,
                       p_val_uniform_bigrams: float = None,
                       p_val_uniform_trigrams: float = None) -> Register[str, Word]:
-    logging.info("SELECT WORDS WITH UNIFORM BIGRAM AND NON-ZERO TRIGRAM LOG-PROBABILITY OF OCCURRENCE IN THE CORPUS")
+    logger.info("SELECT WORDS WITH UNIFORM BIGRAM AND NON-ZERO TRIGRAM LOG-PROBABILITY OF OCCURRENCE IN THE CORPUS")
 
     info = copy(words.info)
 

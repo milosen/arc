@@ -3,17 +3,22 @@ import itertools
 import math
 import random
 from typing import List, Optional, Literal, Dict
+import logging
 
 import numpy as np
 
-from arc.controls.common import get_oscillation_patterns
-from arc.controls.lexicon import make_lexicon_generator
-from arc.core.base_types import Register
-from arc.core.syllable import Syllable
-from arc.core.word import WordType, Word
+from arc.types.base_types import Register, RegisterType
+from arc.types.syllable import Syllable
+from arc.types.word import WordType, Word
+from arc.types.lexicon import LexiconType
+from arc.types.stream import StreamType
 
-StreamType = WordType
-Stream = Word
+from arc.controls.common import get_oscillation_patterns
+
+from arc.core.lexicon import make_lexicon_generator
+
+
+logger = logging.getLogger(__name__)
 
 
 def shuffled_struct_stream(n_words=4, n_sylls_per_word=3, n_repetitions=4):
@@ -291,7 +296,7 @@ def pseudo_rand_tp_struct(n_words=4, n_sylls_per_word=3, n_repetitions=4):
 
 
 def sample_syllable_randomization(
-        lexicon: Register[str, Word],
+        lexicon: LexiconType,
         num_repetitions: int = 4,
         max_tries=1000,
         tp_mode: Literal["word_structured", "position_controlled", "random"] = "word_structured") -> List[Syllable]:
@@ -389,3 +394,50 @@ def get_stream_syllable_stats(stream: StreamType) -> Dict:
             d[syllable.id] = 1
 
     return d
+
+
+def make_streams(
+        lexicons: List[LexiconType],
+        max_rhythmicity: Optional[float] = None,
+        num_repetitions: int = 4,
+        max_tries_randomize: int = 10,
+        n_lexicon_streams: int = 1,
+        tp_modes: tuple = ("random", "word_structured", "position_controlled"),
+        require_all_tp_modes: bool = True
+) -> RegisterType:
+    logger.info("Building streams from lexicons ...")
+
+    streams = {}
+
+    for i, lexicon in enumerate(lexicons):
+        found_all_tp_modes = True
+        new_streams = {}
+        for tp_mode in tp_modes:
+            stream_id = f"Lexicon-{'-'.join(w.id for w in lexicon)}_TP-{tp_mode}"
+
+            maybe_stream: Optional[StreamType] = make_stream_from_lexicon(
+                lexicon,
+                max_rhythmicity=max_rhythmicity,
+                max_tries_randomize=max_tries_randomize,
+                num_repetitions=num_repetitions,
+                tp_mode=tp_mode
+            )
+
+            if maybe_stream:
+                new_streams[stream_id] = maybe_stream
+            else:
+                found_all_tp_modes = False
+                break
+
+        if found_all_tp_modes or (require_all_tp_modes == False):
+            streams.update(new_streams)
+
+    streams_register = Register(**streams)
+
+    streams_register.info = {
+        "tp_modes": tp_modes,
+        "max_rhythmicity": max_rhythmicity,
+        "num_repetitions": num_repetitions
+    }
+
+    return streams_register
