@@ -11,7 +11,7 @@ from arc.types.base_types import Register, RegisterType
 from arc.types.syllable import Syllable
 from arc.types.word import WordType, Word
 from arc.types.lexicon import LexiconType
-from arc.types.stream import StreamType
+from arc.types.stream import StreamType, Stream
 
 from arc.controls.common import get_oscillation_patterns
 
