@@ -140,6 +140,21 @@ def make_lexicons(
     unique_words: bool = False,
     control_features: bool = True
 ) -> List[Lexicon]:
+    """_summary_
+
+    Args:
+        words (RegisterType): The Register of words which the lexicon generation is based on.
+        n_lexicons (int, optional): How many lexicons to generate. Defaults to 5.
+        n_words (int, optional): How many words should be in a lexicon. Defaults to 4.
+        max_overlap (int, optional): How much feature overlap between pairwise word features is allowed. Defaults to 1.
+        lag_of_interest (int, optional): the frequency of the word features for which a feature is consideret 'overlapping'. 1 means the feature frequency is the number of syllables in 1 word. Defaults to 1.
+        max_word_matrix (int, optional): How many words to use maximum (subsample if nessesary) to generate the feature overlap matrix. Defaults to 200.
+        unique_words (bool, optional): check uniqueness of words across all lexicons. Defaults to False.
+        control_features (bool, optional): control feature overlap between words in the lexicon. If false lexicons will be generated completely at random. Defaults to True.
+
+    Returns:
+        List[Lexicon]: A List of Lexicons
+    """
 
     lexicons = []
 

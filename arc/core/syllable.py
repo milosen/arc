@@ -132,6 +132,20 @@ def make_syllables(phonemes: RegisterType, phoneme_pattern: str = "cV",
                    language_alpha: Optional[float] = 0.05,
                    from_format: Literal["ipa", "xsampa"] = "xsampa",
                    lang: str = "deu") -> RegisterType:
+    """_summary_
+
+    Args:
+        phonemes (RegisterType): A Register of phonemes that will be used as a basis to generate the syllables
+        phoneme_pattern (str, optional): describes how a syllable is structured, e.g. "cV" syllables consist of a single-consonant character and a long vowel. Defaults to "cV".
+        unigram_control (bool, optional): apply statistical control (on the basis of p-val of uniform distribution) to single unigrams. Defaults to True.
+        language_control (bool, optional): apply language specific controls (only german for now) on the syllable level. Defaults to True.
+        language_alpha (Optional[float], optional): which p-value to assume for language based statistical control. Defaults to 0.05.
+        from_format (Literal[&quot;ipa&quot;, &quot;xsampa&quot;], optional): language control will read from a syllable corpus. which format to assume. Defaults to "xsampa".
+        lang (str, optional): which language to use for language controls. Defaults to "deu".
+
+    Returns:
+        RegisterType: The final Register of syllables
+    """
 
     syllables = make_feature_syllables(phonemes, phoneme_pattern=phoneme_pattern)
 

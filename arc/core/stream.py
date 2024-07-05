@@ -404,6 +404,19 @@ def make_streams(
         tp_modes: tuple = ("random", "word_structured", "position_controlled"),
         require_all_tp_modes: bool = True
 ) -> RegisterType:
+    """_summary_
+
+    Args:
+        lexicons (List[LexiconType]): A list of lexicons used as a basis for generatng the streams
+        max_rhythmicity (Optional[float], optional): check rhythmicity and discard all streams that have at least one feature with higher PRI than this number. Defaults to None.
+        num_repetitions (int, optional): how many lexicons worth of syllables will be generated per stream. Defaults to 4.
+        max_tries_randomize (int, optional): if max_rhythmicity is given and violated, how many times to try with a new randomization. Defaults to 10.
+        tp_modes (tuple, optional): the ways (modes) in which to control for transition probabilities of syllables in the stream. Defaults to ("random", "word_structured", "position_controlled").
+        require_all_tp_modes (bool, optional): all streams coming from the same lexicon will be discarded if not all their tp-modes have been found. Defaults to True.
+
+    Returns:
+        RegisterType: _description_
+    """
     logger.info("Building streams from lexicons ...")
 
     streams = {}

@@ -62,6 +62,25 @@ def make_words(syllables: RegisterType,
                max_tries=100_000,
                progress_bar: bool = True,
                ) -> RegisterType:
+    """_summary_
+
+    Args:
+        syllables (RegisterType): The Register of syllables to use as a basis for word generation
+        num_syllables (int, optional): how many syllables are in a word. Defaults to 3.
+        bigram_control (bool, optional): apply statistical control on the bigram level. Defaults to True.
+        bigram_alpha (_type_, optional): which p-value to assume for bigram control. Defaults to None.
+        trigram_control (bool, optional): apply statistical control on the trigram level. Defaults to True.
+        trigram_alpha (_type_, optional): which p-value to assume for trigram control. Defaults to None.
+        positional_control (bool, optional): control phoneme positions in words to be likely given the language. Defaults to True.
+        phonotactic_control (bool, optional): control each syllabel for minimum feature overlap with previous syllables. Defaults to True.
+        n_look_back (int, optional): how far to look back in the feature overlap control of the syllables. Defaults to 2.
+        n_words (_type_, optional): how many words to generate. Defaults to 10_000.
+        max_tries (_type_, optional): how often to attemt to add a word to the Register, before the function gives up. Defaults to 100_000.
+        progress_bar (bool, optional): print a progress bar based on 'n_words'. Defaults to True.
+
+    Returns:
+        RegisterType: The Register of words.
+    """
     words = {}
 
     iter_tries = range(max_tries)
