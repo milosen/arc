@@ -6,16 +6,6 @@ This is code for our work [The ARC Toolbox: Artificial Languages with Rhythmicit
 ## Setup
 The following describes how you can set up the software and run the experiments from the paper.
 
-### Optional: create a new virtual environment
-Create a new virtual environment, e.g. using anaconda
-```shell
-conda create -n test_arc python=3.9
-```
-... and activate it 
-```shell
-conda activate test_arc
-```
-
 ### Install Package
 The simplest is to clone this repository and install ARC in editable mode:
 ```shell
@@ -45,10 +35,9 @@ jupyter notebook
 ```
 and select the notebook you want. 
 
-1.  `controlled_stream_generation.ipynb` briefly demonstrates ARC usage
-2.  `data_and_stats_from_the_paper.ipynb` reproduces the data for the figures and the appendices of the paper
-3.  `plots_from_the_paper.ipynb` reproduces the figures of the paper
-4.  *Optional*: If you want to adapt ARC to your own research, you'll probably want to take a look at `arc_types.ipynb` for an intro to ARC's type system.
+1.  `data_and_stats_from_the_paper.ipynb` reproduces the data for the figures and the appendices of the paper
+2.  `plots_from_the_paper.ipynb` reproduces the figures in the publication
+3.  *Optional*: If you want to adapt ARC to your own research, you'll probably want to take a closer look at ARCs internals. More notebooks on that can be found in the [ARC Workshop](https://github.com/milosen/arc)
 
 # Citation
 Please cite our work as

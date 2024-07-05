@@ -401,7 +401,6 @@ def make_streams(
         max_rhythmicity: Optional[float] = None,
         num_repetitions: int = 4,
         max_tries_randomize: int = 10,
-        n_lexicon_streams: int = 1,
         tp_modes: tuple = ("random", "word_structured", "position_controlled"),
         require_all_tp_modes: bool = True
 ) -> RegisterType:
@@ -413,7 +412,6 @@ def make_streams(
         found_all_tp_modes = True
         new_streams = {}
         for tp_mode in tp_modes:
-            stream_id = f"Lexicon-{'-'.join(w.id for w in lexicon)}_TP-{tp_mode}"
 
             maybe_stream: Optional[StreamType] = make_stream_from_lexicon(
                 lexicon,
@@ -424,7 +422,7 @@ def make_streams(
             )
 
             if maybe_stream:
-                new_streams[stream_id] = maybe_stream
+                new_streams[f"{''.join(word.id for word in lexicon)}_{tp_mode}"] = maybe_stream
             else:
                 found_all_tp_modes = False
                 break
@@ -432,12 +430,14 @@ def make_streams(
         if found_all_tp_modes or (require_all_tp_modes == False):
             streams.update(new_streams)
 
-    streams_register = Register(**streams)
+    streams_reg = Register(**streams)
 
-    streams_register.info = {
+    streams_reg.info = {
         "tp_modes": tp_modes,
         "max_rhythmicity": max_rhythmicity,
-        "num_repetitions": num_repetitions
+        "max_tries_randomize": max_tries_randomize,
+        "num_repetitions": num_repetitions,
+        "require_all_tp_modes": require_all_tp_modes
     }
 
-    return streams_register
+    return streams_reg

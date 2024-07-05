@@ -109,7 +109,7 @@ class Register(OrderedDict):
         if isinstance(path, str) and not path.endswith(".json"):
             path = path + ".json"
 
-        with open(path, "w") as file:
+        with open(path, "w", encoding='utf-8') as file:
             json.dump(self.get_self_with_info_key(), file,
                       default=lambda o: o.model_dump(), sort_keys=False, ensure_ascii=False)
 

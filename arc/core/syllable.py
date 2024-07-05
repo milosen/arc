@@ -15,6 +15,7 @@ from arc.io import read_syllables_corpus
 
 from arc.controls.filter import filter_common_phoneme_syllables, filter_uniform_syllables
 
+logger = logging.getLogger(__name__)
 
 def add_phonotactic_features(syllable_phonemes: List[Phoneme]):
     syll_feats = [[] for _ in syllable_phonemes]
@@ -70,7 +71,7 @@ def make_feature_syllables(
 ) -> RegisterType:
     """Generate syllables form feature-phonemes. Only keep syllables that follow the phoneme pattern"""
 
-    logging.info("SELECT SYLLABLES WITH GIVEN PHONEME-TYPE PATTERN AND WITH PHONEMES WE HAVE FEATURES FOR")
+    logger.info("SELECT SYLLABLES WITH GIVEN PHONEME-TYPE PATTERN AND WITH PHONEMES WE HAVE FEATURES FOR")
     valid_phoneme_types = ["c", "C", "v", "V"]
 
     phoneme_types_user = list(phoneme_pattern) if isinstance(phoneme_pattern, str) else phoneme_pattern
@@ -78,10 +79,10 @@ def make_feature_syllables(
     phoneme_types = list(filter(lambda p: p in valid_phoneme_types, phoneme_types_user))
 
     if phoneme_types_user != phoneme_types:
-        logging.warning(f"ignoring invalid phoneme types {phoneme_types_user} -> {phoneme_types}. "
+        logger.warning(f"ignoring invalid phoneme types {phoneme_types_user} -> {phoneme_types}. "
               f"You can use the following phoneme types in your pattern: {valid_phoneme_types}")
 
-    logging.info(f"Search for phoneme-pattern '{''.join(phoneme_types)}'")
+    logger.info(f"Search for phoneme-pattern '{''.join(phoneme_types)}'")
 
     labels_mapping = {"c": LABELS_C, "C": LABELS_C, "v": LABELS_V, "V": LABELS_V}
     syll_feature_labels = list(map(lambda t: labels_mapping[t], phoneme_types))
@@ -104,7 +105,7 @@ def make_feature_syllables(
     phonemes_factors = list(map(lambda phoneme_type: phonemes_mapping[phoneme_type], phoneme_types))
     total_combs = reduce(lambda a, b: a * b, [len(phonemes_factor) for phonemes_factor in phonemes_factors])
     if total_combs > max_combinations:
-        logging.warning(f"Combinatorial explosion with {total_combs} combinations for '{phoneme_types}'."
+        logger.warning(f"Combinatorial explosion with {total_combs} combinations for '{phoneme_types}'."
                         f"I will only generate {max_combinations} of them, but you can set this number higher via the "
                         "option 'max_combinations'.")
 

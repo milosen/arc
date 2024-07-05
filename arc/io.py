@@ -6,16 +6,21 @@ import pathlib
 from importlib import resources as importlib_resources
 from os import PathLike
 from typing import Iterable, Dict, Union, List, Type, Optional, Literal
+from functools import partial
+from copy import copy
 
+import pandas as pd
 import numpy as np
 from scipy import stats
 
 from arc.phonecodes import phonecodes
 from arc.types.base_types import Register, RegisterType
+
+from arc.types.phoneme import PHONEME_FEATURE_LABELS, Phoneme
 from arc.types.syllable import Syllable
 from arc.types.word import Word
-from arc.types.phoneme import PHONEME_FEATURE_LABELS, Phoneme
 from arc.types.lexicon import LexiconType
+from arc.types.stream import Stream
 
 logger = logging.getLogger(__name__)
 
@@ -66,7 +71,7 @@ def read_phoneme_corpus(
     :return:
     """
     logger.info("READ ORDER OF PHONEMES IN WORDS")
-    with open(ipa_seg_path, "r") as csv_file:
+    with open(ipa_seg_path, "r", encoding='utf-8') as csv_file:
         fdata = list(csv.reader(csv_file, delimiter='\t'))
     phonemes = {}
     for phon_data in fdata[1:]:
@@ -98,7 +103,7 @@ def read_syllables_corpus(
 ) -> Register[str, Syllable]:
     logger.info("READ SYLLABLES, FREQUENCIES AND PROBABILITIES FROM CORPUS AND CONVERT SYLLABLES TO IPA")
 
-    with open(syllables_corpus_path, "r") as csv_file:
+    with open(syllables_corpus_path, "r", encoding='utf-8') as csv_file:
         fdata = list(csv.reader(csv_file, delimiter='\t'))
 
     syllables_dict: Dict[str, Syllable] = {}
@@ -123,7 +128,7 @@ def read_bigrams(
 ) -> Register[str, Syllable]:
     logger.info("READ BIGRAMS")
 
-    with open(ipa_bigrams_path, "r") as csv_file:
+    with open(ipa_bigrams_path, "r", encoding='utf-8') as csv_file:
         fdata = list(csv.reader(csv_file, delimiter='\t'))
 
     freqs = [int(data[0].split(",")[2]) for data in fdata[1:]]
@@ -152,7 +157,7 @@ def read_trigrams(
         ipa_trigrams_path: str = IPA_TRIGRAMS_DEFAULT_PATH,
 ) -> Register[str, Syllable]:
     logger.info("READ TRIGRAMS")
-    fdata = list(csv.reader(open(ipa_trigrams_path, "r"), delimiter='\t'))
+    fdata = list(csv.reader(open(ipa_trigrams_path, "r", encoding='utf-8'), delimiter='\t'))
 
     freqs = [int(data[0].split(",")[1]) for data in fdata[1:]]
     p_uniform = stats.uniform.sf(abs(stats.zscore(np.log(freqs))))
@@ -177,7 +182,7 @@ def read_trigrams(
 def read_phonemes_csv(binary_features_path: str = BINARY_FEATURES_DEFAULT_PATH) -> Register:
     logger.info("READ MATRIX OF BINARY FEATURES FOR ALL IPA PHONEMES")
 
-    with open(binary_features_path, "r") as csv_file:
+    with open(binary_features_path, "r", encoding='utf-8') as csv_file:
         fdata = list(csv.reader(csv_file))
 
     phons = [row[0] for row in fdata[1:]]
@@ -202,7 +207,7 @@ def read_phonemes_csv(binary_features_path: str = BINARY_FEATURES_DEFAULT_PATH) 
 def check_german(words: List[Word]):
     # TODO
     # SAVE WORDS IN ONE CSV FILE
-    with open(os.path.join(RESULTS_DEFAULT_PATH, 'words.csv'), 'w') as f:
+    with open(os.path.join(RESULTS_DEFAULT_PATH, 'words.csv'), 'w', encoding='utf-8') as f:
         writer = csv.writer(f)
         for word in words:
             writer.writerows([[word.id, 0]])
@@ -220,7 +225,7 @@ def check_german(words: List[Word]):
     #     '0' OTHERWISE (that is, the item is good)
 
     logger.info("LOAD WORDS FROM CSV FILE AND SELECT THOSE THAT CANNOT BE MISTAKEN FOR GERMAN WORDS")
-    with open(os.path.join(RESULTS_DEFAULT_PATH, "words.csv"), 'r') as f:
+    with open(os.path.join(RESULTS_DEFAULT_PATH, "words.csv"), 'r', encoding='utf-8') as f:
         fdata = list(csv.reader(f, delimiter='\t'))
     rows = [row[0].split(",") for row in fdata]
     words = [row[0] for row in rows if row[1] == "0"]
@@ -236,7 +241,7 @@ def arc_register_from_json(path: Union[str, PathLike], arc_type: Type) -> Regist
     """
     Load an arc register from a json file.
     """
-    with open(path, "r") as file:
+    with open(path, "r", encoding='utf-8') as file:
         d = json.load(file)
 
     # we have to process the "_info" field separately because it's not a valid ARC type
