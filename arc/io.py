@@ -84,6 +84,14 @@ def read_phoneme_corpus(
             else:
                 phonemes[phon] = Phoneme(id=phon, info={"order": [position_in_word]})
 
+    for phon in phonemes:
+        positions = max(phonemes[phon].info["order"])
+        phonemes[phon].info["word_position_prob"] = {}
+        for position in range(positions):
+            phoneme_pos_prob = phonemes[phon].info["order"].count(position + 1) / len(phonemes[phon].info["order"])
+            phonemes[phon].info["word_position_prob"][position] = phoneme_pos_prob
+        del phonemes[phon].info["order"]
+
     return Register(phonemes)
 
 
@@ -251,11 +259,16 @@ def arc_register_from_json(path: Union[str, PathLike], arc_type: Type) -> Regist
     return register
 
 
-def load_phonemes(path_to_json: Optional[Union[str, PathLike]] = None) -> RegisterType:
+def load_phonemes(path_to_json: Optional[Union[str, PathLike]] = None, language_control=False) -> RegisterType:
     if path_to_json is None:
-        return load_default_phonemes()
+        phonemes = load_default_phonemes()
+    else:
+        phonemes = arc_register_from_json(path_to_json, Phoneme)
+    
+    if language_control:
+        phonemes = phonemes.intersection(read_phoneme_corpus())
 
-    return arc_register_from_json(path_to_json, Phoneme)
+    return phonemes
 
 
 def load_syllables(path_to_json: Union[str, PathLike]):

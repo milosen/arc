@@ -114,7 +114,7 @@ def pseudo_walk_tp_random(P, T, v, S, N, n_words=4, n_sylls_per_word=3):
 def pseudo_rand_tp_random(n_words=4, n_sylls_per_word=3, n_repetitions=4):
     # TODO: make faster and easier to read
     n_sylls_total = n_sylls_per_word * n_words  # number of syllables in a lexicon
-    n_iters = n_sylls_total * n_repetitions  # number of repetitions in a trial
+    n_iters = n_repetitions  # number of repetitions in a trial
     n_loop = 1000  # ???
     while True:
         p1 = np.repeat(range(n_sylls_total), math.ceil(n_iters / int(n_sylls_total / n_words))).tolist()
@@ -203,7 +203,7 @@ def pseudo_rand_tp_random(n_words=4, n_sylls_per_word=3, n_repetitions=4):
 def pseudo_rand_tp_random_position_controlled(n_words=4, n_sylls_per_word=3, n_repetitions=4):
     # TODO: make faster and easier to read
     n_sylls_total = n_sylls_per_word * n_words  # number of syllables in a lexicon
-    n_iters = n_sylls_total * n_repetitions  # number of repetitions in a trial
+    n_iters = n_repetitions  # number of repetitions in a trial
     P = [list(range(i, n_sylls_total, n_sylls_per_word)) for i in range(n_sylls_per_word)]
     I = list(range(n_sylls_per_word))
     B = I[:]
@@ -238,7 +238,7 @@ def pseudo_rand_tp_random_position_controlled(n_words=4, n_sylls_per_word=3, n_r
 def pseudo_rand_tp_struct(n_words=4, n_sylls_per_word=3, n_repetitions=4):
     # TODO: make faster and easier to read
     n_sylls_total = n_sylls_per_word * n_words  # number of syllables in a lexicon
-    n_iters = n_sylls_total * n_repetitions  # number of repetitions in a trial
+    n_iters = n_repetitions  # number of repetitions in a trial
     while True:
         P = list(itertools.permutations(np.arange(n_words)))
         S = [[*(i for _ in range(math.ceil(n_iters / len(P))))] for i in P]
@@ -297,7 +297,7 @@ def pseudo_rand_tp_struct(n_words=4, n_sylls_per_word=3, n_repetitions=4):
 
 def sample_syllable_randomization(
         lexicon: LexiconType,
-        num_repetitions: int = 4,
+        n_repetitions: int = 4,
         max_tries=1000,
         tp_mode: Literal["word_structured", "position_controlled", "random"] = "word_structured") -> List[Syllable]:
     if tp_mode == "word_structured":
@@ -317,7 +317,7 @@ def sample_syllable_randomization(
     n_words = len(lexicon)
 
     for _ in range(max_tries):
-        randomized_indexes, _ = rand_func(n_words=n_words, n_sylls_per_word=n_syllables, n_repetitions=num_repetitions)
+        randomized_indexes, _ = rand_func(n_words=n_words, n_sylls_per_word=n_syllables, n_repetitions=n_repetitions)
         if randomized_indexes not in randomized_indexes_list:
             randomized_indexes_list.append(randomized_indexes)
             if tp_mode == "word_structured":
@@ -340,16 +340,16 @@ def compute_rhythmicity_index_sylls_stream(stream, patterns):
 
 
 def make_stream_from_lexicon(lexicon: Register[str, Word],
-                             max_rhythmicity: Optional[float] = None, max_tries_randomize=10, num_repetitions: int = 4,
+                             max_rhythmicity: Optional[float] = None, max_tries_randomize=10, n_repetitions: int = 4,
                              tp_mode: Literal["word_structured", "position_controlled", "random"] = "word_structured"):
 
     for sylls_stream in sample_syllable_randomization(lexicon, max_tries=max_tries_randomize, tp_mode=tp_mode,
-                                                      num_repetitions=num_repetitions):
+                                                      n_repetitions=n_repetitions):
         patterns = get_oscillation_patterns(len(lexicon[0].syllables))
         rhythmicity_indexes = compute_rhythmicity_index_sylls_stream(sylls_stream, patterns)
 
         if max_rhythmicity is None or (max(rhythmicity_indexes) <= max_rhythmicity):
-            i_labels = enumerate(lexicon.info["syllable_feature_labels"])
+            i_labels = enumerate(lexicon.info["syllables_info"]["syllable_feature_labels"])
             feature_labels = [f"phon_{i_phon+1}_{label}" for i_phon, labels in i_labels for label in labels]
 
             return Stream(
@@ -399,7 +399,7 @@ def get_stream_syllable_stats(stream: StreamType) -> Dict:
 def make_streams(
         lexicons: List[LexiconType],
         max_rhythmicity: Optional[float] = None,
-        num_repetitions: int = 4,
+        stream_length: int = 32,
         max_tries_randomize: int = 10,
         tp_modes: tuple = ("random", "word_structured", "position_controlled"),
         require_all_tp_modes: bool = True
@@ -409,7 +409,7 @@ def make_streams(
     Args:
         lexicons (List[LexiconType]): A list of lexicons used as a basis for generatng the streams
         max_rhythmicity (Optional[float], optional): check rhythmicity and discard all streams that have at least one feature with higher PRI than this number. Defaults to None.
-        num_repetitions (int, optional): how many lexicons worth of syllables will be generated per stream. Defaults to 4.
+        stream_length (int, optional): how many syllables are in a stream in multiples of syllables in the lexicon. Defaults to 4.
         max_tries_randomize (int, optional): if max_rhythmicity is given and violated, how many times to try with a new randomization. Defaults to 10.
         tp_modes (tuple, optional): the ways (modes) in which to control for transition probabilities of syllables in the stream. Defaults to ("random", "word_structured", "position_controlled").
         require_all_tp_modes (bool, optional): all streams coming from the same lexicon will be discarded if not all their tp-modes have been found. Defaults to True.
@@ -430,7 +430,7 @@ def make_streams(
                 lexicon,
                 max_rhythmicity=max_rhythmicity,
                 max_tries_randomize=max_tries_randomize,
-                num_repetitions=num_repetitions,
+                n_repetitions=stream_length,
                 tp_mode=tp_mode
             )
 
@@ -449,7 +449,7 @@ def make_streams(
         "tp_modes": tp_modes,
         "max_rhythmicity": max_rhythmicity,
         "max_tries_randomize": max_tries_randomize,
-        "num_repetitions": num_repetitions,
+        "stream_length": stream_length,
         "require_all_tp_modes": require_all_tp_modes
     }
 

@@ -1,3 +1,4 @@
+from functools import partial
 import logging
 import os.path
 from copy import copy
@@ -7,7 +8,7 @@ from typing import Iterable, Dict, Union, Optional
 import numpy as np
 from scipy import stats
 
-from arc.types.base_types import Register
+from arc.types.base_types import Register, RegisterType
 from arc.types.phoneme import Phoneme
 from arc.types.syllable import Syllable
 from arc.types.word import Word
@@ -20,7 +21,7 @@ logger = logging.getLogger(__name__)
 
 
 def filter_uniform_syllables(syllables: Register[str, Syllable], alpha: float = 0.05):
-    logger.info("FILTER UNIFORMLY DISTRIBUTED SYLLABLES")
+    logger.info("Filter uniformly distributed syllables.")
     freqs = [s.info["freq"] for s in syllables]
     p_vals_uniform = stats.uniform.sf(abs(stats.zscore(np.log(freqs))))
     return Register({k: v for i, (k, v) in enumerate(syllables.items()) if p_vals_uniform[i] > alpha},
@@ -28,7 +29,7 @@ def filter_uniform_syllables(syllables: Register[str, Syllable], alpha: float = 
 
 
 def filter_common_phoneme_syllables(syllables, ipa_seg_path: Union[str, PathLike] = IPA_SEG_DEFAULT_PATH):
-    logger.info("FILTER SYLLABLES WITH COMMON/NATIVE PHONEMES")
+    logger.info("Filter syllables with common/native phonemes.")
     native_phonemes = read_phoneme_corpus(ipa_seg_path=ipa_seg_path)
 
     def is_native(syllable):
@@ -39,55 +40,32 @@ def filter_common_phoneme_syllables(syllables, ipa_seg_path: Union[str, PathLike
     }, _info=copy(syllables.info))
 
 
-def get_rare_phonemes(syllables: Iterable[Syllable], phonemes: Dict[str, Phoneme],
-                      position: int = 0, p_threshold: float = 0.05):
-    """
-    Get phonemes that are rarely (in the sense that p_val < 0.05) found at `position` of a word
-    :param syllables:
-    :param phonemes:
-    :param position:
-    :param p_threshold:
-    :return:
-    """
-    logger.info("FIND SYLLABLES THAT ARE RARE AT THE ONSET OF A WORD")
+def phoneme_is_common_at(phoneme: Phoneme, position: int = 0, p_threshold: float = 0.05):
+    assert "word_position_prob" in phoneme.info.keys(), (
+        "To check for phoneme position probability, your phonemes need the 'word_position_prob' info key. " 
+        "Before creating syllables and words from your phonemes run `phonemes = phonemes.intersection(read_phoneme_corpus())`."
+    )
 
-    rare_onset_phonemes = []
-    for s in syllables:
-        phon = s.id[position]
-        if phon in phonemes:
-            phoneme_prob = phonemes[phon].info["order"].count(position + 1) / len(phonemes[phon].info["order"])
-        else:
-            phoneme_prob = 0
-        if phoneme_prob < p_threshold:
-            rare_onset_phonemes.append(s[position])
-
-    return rare_onset_phonemes
+    return phoneme.info["word_position_prob"].get(position, 0) >= p_threshold
 
 
-def filter_common_phoneme_words(words, position: Optional[int] = None, ipa_seg_path: Union[str, PathLike] = IPA_SEG_DEFAULT_PATH):
-    logger.info("EXCLUDE WORDS WITH LOW (ONSET) SYLLABLE PROBABILITY")
-    native_phonemes = read_phoneme_corpus(ipa_seg_path=ipa_seg_path)
-    list_syllables = [syllable for word in words for syllable in word]
+def filter_common_phonemes_at_all_positions(word: Word, p_threshold: float = 0.05) -> bool:
+    phonemes = [phoneme for syllable in word for phoneme in syllable]
+    return all(phoneme_is_common_at(ph, position, p_threshold=p_threshold) for position, ph in enumerate(phonemes))
 
-    rare_phonemes = get_rare_phonemes(list_syllables, native_phonemes)
+def filter_common_phonemes_at_position(word: Word, position, p_threshold: float = 0.05) -> bool:
+    phonemes = [phoneme for syllable in word for phoneme in syllable]
+    return phoneme_is_common_at(phonemes[position], position, p_threshold=p_threshold)
+
+
+def filter_common_phoneme_words(words: RegisterType, position: Optional[int] = None, p_threshold: float = 0.05, 
+                                ipa_seg_path: Union[str, PathLike] = IPA_SEG_DEFAULT_PATH):
+    logger.info("Exclude words with low (onset) syllable probability.")
 
     if position is None:
-        reg = Register({}, _info=copy(words.info))
-        for word in words:
-            if all(ph not in rare_phonemes for syll in word for ph in syll):
-                reg.append(word)
-        return reg
+        return words.filter(filter_common_phonemes_at_all_positions, p_threshold=p_threshold)
     else:
-        # e.g. word[syll_idx=0][phon_idx=0] means first phoneme in first syllable of the word
-        if position == -1:
-            syll_idx, phon_idx = -1, -1
-        else:
-            phons_in_syll = len(words[0][0].phonemes)
-            syll_idx, phon_idx = position // phons_in_syll, position % phons_in_syll
-
-        return Register({
-            word.id: word for word in words if word[syll_idx][phon_idx] not in rare_phonemes
-        }, _info=copy(words.info))
+        return words.filter(filter_common_phonemes_at_position, position=position, p_threshold=p_threshold)
 
 
 def check_bigram_stats(word: Word, valid_bigrams: Register[str, Syllable]):
@@ -110,43 +88,42 @@ def check_trigram_stats(word: Word, valid_trigrams: Register[str, Syllable]):
     return True
 
 
-def filter_gram_stats(words: Register[str, Word],
-                      bigram_control: bool = True,
-                      trigram_control: bool = True,
-                      bigrams_path: Optional[Union[str, PathLike]] = IPA_BIGRAMS_DEFAULT_PATH,
-                      trigrams_path: Optional[Union[str, PathLike]] = IPA_TRIGRAMS_DEFAULT_PATH,
-                      p_val_uniform_bigrams: float = None,
-                      p_val_uniform_trigrams: float = None) -> Register[str, Word]:
-    logger.info("SELECT WORDS WITH UNIFORM BIGRAM AND NON-ZERO TRIGRAM LOG-PROBABILITY OF OCCURRENCE IN THE CORPUS")
+def filter_bigrams(words: RegisterType,
+                   bigrams_path: Optional[Union[str, PathLike]] = IPA_BIGRAMS_DEFAULT_PATH,
+                   p_val: float = None) -> Register[str, Word]:
+    logger.info("Select words with uniform bigram and non-zero trigram log-probability of occurrence in the corpus.")
 
-    info = copy(words.info)
+    words = copy(words)  # ?
 
-    filtered_words = Register(**words)
+    words.info.update({"bigram_pval": p_val})
 
-    if bigram_control:
-        print("bigram control...")
-        assert os.path.exists(bigrams_path), "Bigram Control requires valid path to bigrams file"
-        bigrams: Register[str, Syllable] = read_bigrams(bigrams_path)
-        if p_val_uniform_bigrams is not None:
-            bigrams = Register({
-                k: bigram for k, bigram in bigrams.items() if bigram.info["p_unif"] > p_val_uniform_bigrams
-            })
-        info.update({"bigram_pval": p_val_uniform_bigrams, "bigrams_count": len(bigrams)})
-        filtered_words_dict = {word.id: word for word in filtered_words if check_bigram_stats(word, bigrams)}
-        filtered_words = Register(**filtered_words_dict)
+    assert os.path.exists(bigrams_path), "Bigram control requires valid path to bigrams file"
 
-    if trigram_control:
-        print("trigram control...")
-        assert os.path.exists(trigrams_path), "Trigram Control requires valid path to trigrams file"
-        trigrams: Register[str, Syllable] = read_trigrams(trigrams_path)
-        if p_val_uniform_trigrams is not None:
-            trigrams = Register({
-                k: trigram for k, trigram in trigrams.items() if trigram.info["p_unif"] > p_val_uniform_trigrams
-            })
-        info.update({"trigram_pval": p_val_uniform_trigrams, "trigrams_count": len(trigrams)})
-        filtered_words_dict = {word.id: word for word in filtered_words if check_trigram_stats(word, trigrams)}
-        filtered_words = Register(**filtered_words_dict)
+    bigrams = read_bigrams(bigrams_path)
 
-    filtered_words.info = info
+    if p_val is not None:
+        bigrams = bigrams.filter(lambda bigram: bigram.info["p_unif"] > p_val)
 
-    return filtered_words
+    words.filter(check_bigram_stats, valid_bigrams=bigrams)
+
+    return words
+
+
+def filter_trigrams(words: RegisterType,
+                    trigrams_path: Optional[Union[str, PathLike]] = IPA_TRIGRAMS_DEFAULT_PATH,
+                    p_val: float = None) -> Register[str, Word]:
+    logger.info("Select words with uniform bigram and non-zero trigram log-probability of occurrence in the corpus.")
+
+    words = copy(words)  # ?
+
+    words.info.update({"trigram_pval": p_val})
+
+    assert os.path.exists(trigrams_path), "Trigram control requires valid path to trigrams file"
+    trigrams = read_trigrams(trigrams_path)
+
+    if p_val is not None:
+        trigrams = trigrams.filter(lambda trigram: trigram.info["p_unif"] > p_val)
+        
+    words.filter(check_trigram_stats, valid_trigrams=trigrams)
+
+    return words

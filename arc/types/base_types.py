@@ -118,7 +118,7 @@ class Register(OrderedDict):
             other: RegisterType
     ) -> RegisterType:
         """
-        Select Elements that are in both corpora and merge the data
+        Select Elements that are in both registers and merge the data
         :param other:
         :return:
         """
@@ -139,3 +139,20 @@ class Register(OrderedDict):
     def new_from_dict(self, dictionary: dict) -> RegisterType:
         new_info = copy(self.info)
         return Register(dictionary, _info=new_info)
+    
+    def empty_like(self):
+        return Register({}, _info=copy(self.info))
+
+    def flatten(self) -> RegisterType:
+        reg = self.empty_like()
+        for element in self:
+            for sub_element in element.get_elements():
+                reg.append(sub_element)
+        return reg
+    
+    def filter(self, func, *args, **kwargs):
+        reg = self.empty_like()
+        for element in self:
+            if func(element, *args, **kwargs):
+                reg.append(element)
+        return reg

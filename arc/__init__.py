@@ -16,6 +16,6 @@ from .core.word import make_words
 from .core.lexicon import make_lexicons
 from .core.stream import make_streams
 
-from .eval import to_lexicon, to_stream
+from .eval import to_lexicon, to_stream, to_word
 
 warnings.filterwarnings("ignore", category=TqdmExperimentalWarning)

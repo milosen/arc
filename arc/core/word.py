@@ -13,7 +13,7 @@ from arc.types.syllable import Syllable, SyllableType
 from arc.types.word import Word, WordType
 
 from arc.controls.common import get_oscillation_patterns
-from arc.controls.filter import filter_common_phoneme_words, filter_gram_stats
+from arc.controls.filter import filter_bigrams, filter_common_phoneme_words, filter_trigrams
 
 
 def check_syll_feature_overlap(syllables):
@@ -49,6 +49,38 @@ def word_overlap_matrix(words: Register[str, Word], lag_of_interest: int = 1):
     return overlap
 
 
+def generate_feature_words(syllables, iter_tries, n_syllables, n_look_back, phonotactic_control, progress_bar, n_words):
+    words = {}
+
+    if progress_bar:
+        pbar = tqdm(total=n_words)
+
+    for _ in iter_tries:
+        sylls = []
+        for _ in range(n_syllables):
+            sub = list(filter(lambda x: x.id not in sylls, syllables))
+            if phonotactic_control:
+                sub = generate_subset_syllables(sub, sylls[-n_look_back:])
+            if sub:
+                new_rand_valid_syllable = random.sample(sub, 1)[0]
+                sylls.append(new_rand_valid_syllable)
+
+        if len(sylls) == n_syllables:
+            word_id = "".join(s.id for s in sylls)
+            if word_id not in words:
+                word_features = list(list(tup) for tup in zip(*[s.info["binary_features"] for s in sylls]))
+                words[word_id] = Word(id=word_id, info={"binary_features": word_features}, syllables=sylls)
+                if progress_bar:
+                    pbar.update(1)
+
+        if len(words) == n_words:
+            logging.info(f"Done: Found {n_words} words.")
+            break
+    
+    return Register(words, _info={"n_syllables_per_word": n_syllables, "n_look_back": n_look_back, "phonotactic_control": phonotactic_control})
+
+
+
 def make_words(syllables: RegisterType,
                num_syllables=3,
                bigram_control=True,
@@ -56,6 +88,8 @@ def make_words(syllables: RegisterType,
                trigram_control=True,
                trigram_alpha=None,
                positional_control=True,
+               positional_control_position=None,
+               position_alpha=0,
                phonotactic_control=True,
                n_look_back=2,
                n_words=10_000,
@@ -72,6 +106,8 @@ def make_words(syllables: RegisterType,
         trigram_control (bool, optional): apply statistical control on the trigram level. Defaults to True.
         trigram_alpha (_type_, optional): which p-value to assume for trigram control. Defaults to None.
         positional_control (bool, optional): control phoneme positions in words to be likely given the language. Defaults to True.
+        positional_control_position (int, optional): At which position to control phoneme likelihood (None means all). Defaults to None.
+        position_alpha (float, optional): probability throshold for positional control. Defaults to 0.
         phonotactic_control (bool, optional): control each syllabel for minimum feature overlap with previous syllables. Defaults to True.
         n_look_back (int, optional): how far to look back in the feature overlap control of the syllables. Defaults to 2.
         n_words (_type_, optional): how many words to generate. Defaults to 10_000.
@@ -81,48 +117,23 @@ def make_words(syllables: RegisterType,
     Returns:
         RegisterType: The Register of words.
     """
-    words = {}
 
     iter_tries = range(max_tries)
 
-    if progress_bar:
-        pbar = tqdm(total=n_words)
+    words_register = generate_feature_words(syllables, iter_tries, num_syllables, n_look_back, phonotactic_control, progress_bar, n_words)
 
-    for _ in iter_tries:
-        sylls = []
-        for _ in range(num_syllables):
-            sub = list(filter(lambda x: x.id not in sylls, syllables))
-            if phonotactic_control:
-                sub = generate_subset_syllables(sub, sylls[-n_look_back:])
-            if sub:
-                new_rand_valid_syllable = random.sample(sub, 1)[0]
-                sylls.append(new_rand_valid_syllable)
+    words_register.info["syllables_info"] = copy(syllables.info)
 
-        if len(sylls) == num_syllables:
-            word_id = "".join(s.id for s in sylls)
-            if word_id not in words:
-                word_features = list(list(tup) for tup in zip(*[s.info["binary_features"] for s in sylls]))
-                words[word_id] = Word(id=word_id, info={"binary_features": word_features}, syllables=sylls)
-                if progress_bar:
-                    pbar.update(1)
+    if bigram_control:
+        print("bigram control...")
+        words_register = filter_bigrams(words_register, p_val=bigram_alpha)
 
-        if len(words) == n_words:
-            logging.info(f"Done: Found {n_words} words.")
-            break
-
-    words_register = Register(words)
-    words_register.info = copy(syllables.info)
-
-    words_register = filter_gram_stats(
-        words_register,
-        bigram_control=bigram_control,
-        trigram_control=trigram_control,
-        p_val_uniform_bigrams=bigram_alpha,
-        p_val_uniform_trigrams=trigram_alpha
-    )
+    if trigram_control:
+        print("trigram control...")
+        words_register = filter_trigrams(words_register, p_val=trigram_alpha)
 
     if positional_control:
         print("positional control...")
-        words_register = filter_common_phoneme_words(words_register)
+        words_register = filter_common_phoneme_words(words_register, p_threshold=position_alpha, position=positional_control_position)
 
     return words_register
