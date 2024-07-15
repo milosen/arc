@@ -1,11 +1,8 @@
 import collections
 import itertools
 import math
-import random
 from typing import List, Optional, Literal, Dict
 import logging
-
-import numpy as np
 
 from arc.types.base_types import Register, RegisterType
 from arc.types.syllable import Syllable
@@ -16,6 +13,8 @@ from arc.types.stream import StreamType, Stream
 from arc.controls.common import get_oscillation_patterns
 
 from arc.core.lexicon import make_lexicon_generator
+
+from arc.controls.common import *
 
 
 logger = logging.getLogger(__name__)

@@ -1,10 +1,11 @@
 import json
-import random
 from abc import ABC, abstractmethod
 from collections import OrderedDict
 from copy import copy
 from os import PathLike
 from typing import Dict, Any, TypeVar, Union
+
+from arc.controls.common import *
 
 RegisterType = TypeVar("RegisterType", bound="Register")
 

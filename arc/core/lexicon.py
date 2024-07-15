@@ -1,12 +1,9 @@
 import itertools
 import logging
 import math
-import random
 from copy import copy
 from functools import partial
 from typing import Generator, Iterable, Set, List
-
-import numpy as np
 
 from arc.types.base_types import Register, RegisterType
 from arc.types.syllable import SyllableType
@@ -14,6 +11,8 @@ from arc.types.word import WordType, Word
 from arc.types.lexicon import Lexicon, LexiconType
 
 from arc.core.word import word_overlap_matrix
+
+from arc.controls.common import *
 
 logger = logging.getLogger(__name__)
 

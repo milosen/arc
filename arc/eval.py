@@ -24,7 +24,7 @@ from arc.core.syllable import LABELS_C, LABELS_V, syllable_from_phonemes
 from arc.core.word import Word, word_overlap_matrix
 from arc.core.stream import compute_rhythmicity_index_sylls_stream, get_oscillation_patterns
 
-DEFAULT_PHONEMES = load_phonemes()
+ALL_DEFAULT_PHONEMES = load_phonemes(language_control=False)
 SYLLABLE_FEAT_LABELS = [LABELS_C] + [LABELS_V]
 
 def to_syllable(syllable, syllable_type="cv"):
@@ -42,11 +42,11 @@ def to_syllable(syllable, syllable_type="cv"):
                           "All syllables must be of that type.")
     
     if is_diphthong:
-        syllable_obj = syllable_from_phonemes(DEFAULT_PHONEMES, syllable[:2], SYLLABLE_FEAT_LABELS)
+        syllable_obj = syllable_from_phonemes(ALL_DEFAULT_PHONEMES, syllable[:2], SYLLABLE_FEAT_LABELS)
         syllable_obj.id = syllable
         return syllable_obj
         
-    return syllable_from_phonemes(DEFAULT_PHONEMES, syllable, SYLLABLE_FEAT_LABELS)
+    return syllable_from_phonemes(ALL_DEFAULT_PHONEMES, syllable, SYLLABLE_FEAT_LABELS)
 
 def to_word(word, syllable_type="cv"):
     to_syllable_partial = partial(to_syllable, syllable_type=syllable_type)

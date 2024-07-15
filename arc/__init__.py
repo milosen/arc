@@ -1,8 +1,6 @@
-import warnings
-
-from tqdm import TqdmExperimentalWarning
-
 from .io import load_phonemes, load_syllables, load_words, load_lexicons
+
+from .controls.common import set_seed
 
 from .types.base_types import Register, RegisterType, Element
 from .types.phoneme import Phoneme, PhonemeType
@@ -17,5 +15,3 @@ from .core.lexicon import make_lexicons
 from .core.stream import make_streams
 
 from .eval import to_lexicon, to_stream, to_word
-
-warnings.filterwarnings("ignore", category=TqdmExperimentalWarning)

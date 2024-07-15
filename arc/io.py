@@ -259,11 +259,16 @@ def arc_register_from_json(path: Union[str, PathLike], arc_type: Type) -> Regist
     return register
 
 
-def load_phonemes(path_to_json: Optional[Union[str, PathLike]] = None, language_control=False) -> RegisterType:
-    if path_to_json is None:
-        phonemes = load_default_phonemes()
-    else:
-        phonemes = arc_register_from_json(path_to_json, Phoneme)
+def load_phonemes(language_control: bool = True) -> RegisterType:
+    """Load phoneme corpus with phonological features.
+
+    Args:
+        language_control (bool, optional): Filter out phonemes that are not common in the phoneme corpus (german). Defaults to True.
+
+    Returns:
+        RegisterType: _description_
+    """
+    phonemes = load_default_phonemes()
     
     if language_control:
         phonemes = phonemes.intersection(read_phoneme_corpus())

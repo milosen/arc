@@ -1,7 +1,6 @@
 from copy import copy
 import itertools
 import logging
-import random
 from typing import TypeVar, List, Dict, Any
 
 import numpy as np
@@ -12,7 +11,7 @@ from arc.types.base_types import Register, Element, RegisterType
 from arc.types.syllable import Syllable, SyllableType
 from arc.types.word import Word, WordType
 
-from arc.controls.common import get_oscillation_patterns
+from arc.controls.common import *
 from arc.controls.filter import filter_bigrams, filter_common_phoneme_words, filter_trigrams
 
 
