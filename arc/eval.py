@@ -59,7 +59,7 @@ def to_lexicon(lexicon, syllable_type="cv"):
     to_word_partial = partial(to_word, syllable_type=syllable_type)
     word_objs_list = list(map(to_word_partial, lexicon))
     lexicon = Register({w.id:  w for w in word_objs_list})
-    lexicon.info.update({"syllable_feature_labels": [LABELS_C, LABELS_V],  "syllable_type": syllable_type})
+    lexicon.info.update({"syllables_info": {"syllable_feature_labels": [LABELS_C, LABELS_V],  "syllable_type": syllable_type}})
     overlap = word_overlap_matrix(lexicon)
     lexicon.info["cumulative_feature_repetitiveness"] = np.triu(overlap, 1).sum()
     lexicon.info["max_pairwise_feature_repetitiveness"] = np.triu(overlap, 1).max()
