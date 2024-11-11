@@ -65,7 +65,21 @@ def to_lexicon(lexicon, syllable_type="cv"):
     lexicon.info["max_pairwise_feature_repetitiveness"] = int(np.triu(overlap, 1).max())
     return lexicon
 
-def to_stream(stream, syllable_type="cv", lag_of_interest=3):
+def to_stream(stream: list, syllable_type: str = "cv", lag_of_interest: int = 3):
+    """Generate stream object from stream text file.
+
+    Args:
+        stream (list): stream as list of strings
+        syllable_type (str, optional): phoneme pattern for syllables. Defaults to "cv".
+        lag_of_interest (int, optional): Oscillation patterns for feature matching. 
+                                         Usually equal to the number of syllables in a word. Defaults to 3.
+
+    Raises:
+        ValueError: Syllable type not supported.
+
+    Returns:
+        Stream: The parsed stream.
+    """
     if syllable_type not in ["cv", "cV"]:
         raise ValueError(f"Syllable type {syllable_type} not supported, only one of ['cv', 'cV'].")
     to_syllable_partial = partial(to_syllable, syllable_type=syllable_type)

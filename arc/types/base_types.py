@@ -26,6 +26,12 @@ class Element(ABC):
     @abstractmethod
     def get_elements(self):
         pass
+    
+    def flatten(self) -> RegisterType:
+        reg = Register({})
+        for sub_element in self.get_elements():
+            reg.append(sub_element)
+        return reg
 
 
 class Register(OrderedDict):

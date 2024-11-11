@@ -1,5 +1,5 @@
-from arc.eval import to_lexicon
-from arc.io import read_syllables_corpus
+from arc.eval import to_lexicon, to_stream
+from arc.io import read_phoneme_corpus, read_syllables_corpus
 import click
 import logging
 import os
@@ -69,13 +69,15 @@ def cli():
     pass
 
 
-@cli.command(help="Evaluate existing lexicons")
+@cli.command(help="Evaluate existing lexicon.")
 @click.option('--lexicon', type=str, default="lexicon.txt", help="Name of text file containing the lexicon. ARC will look for it in the 'workspace' directory.")
 @click.option('--workspace', type=click.Path(), default=ARC_WORKSPACE, help="Write all results and checkpoints.")
+@click.option('--ssml/--no-ssml', type=bool, default=True, help="Export syllables to SSML.")
 @click.option('--open-browser/--no-open-browser', type=bool, default=True, help="Display results json in default browser.")
 def evaluate_lexicon(
     lexicon: str,
     workspace: str,
+    ssml: bool,
     open_browser: bool
 ):
     workspace_path = setup_workspace(workspace, name="arc_eval_lexicon_out")
@@ -88,10 +90,10 @@ def evaluate_lexicon(
 
     lexicon = to_lexicon([t .split("|") for t in data.split("||")], syllable_type="cv")
 
-    SAVE_PATH = os.path.join(workspace_path, "lexicon.json")
+    save_path = os.path.join(workspace_path, "lexicon.json")
     logger.info(f"Read Lexicon: {lexicon}")
-    lexicon.save(SAVE_PATH)
-    logger.info(f"Lexicon object saved to file: {SAVE_PATH}")
+    lexicon.save(save_path)
+    logger.info(f"Lexicon object saved to file: {save_path}")
 
     syllables = lexicon.flatten()
     syllables.save(os.path.join(workspace_path, "syllables.json"))
@@ -101,11 +103,76 @@ def evaluate_lexicon(
     syllables_with_corpus_stats.save(os.path.join(workspace_path, "syllables_with_corpus_stats.json"))
     logger.info(f"Syllables object with corpus stats saved to file: {os.path.join(workspace_path, 'syllables_with_corpus_stats.json')}")
 
+    if ssml:
+        from arc.io import export_speech_synthesizer
+        export_speech_synthesizer(syllables, syllables_dir=os.path.join(workspace_path, "ssml"))
+
+    phonemes = syllables.flatten()
+    phonemes.save(os.path.join(workspace_path, "phonemes.json"))
+    logger.info(f"Phonemes object saved to file: {os.path.join(workspace_path, 'phonemes.json')}")
+
+    corpus_phonemes = read_phoneme_corpus()
+    phonemes_with_corpus_stats = phonemes.intersection(corpus_phonemes)
+    phonemes_with_corpus_stats.save(os.path.join(workspace_path, "phonemes_with_corpus_stats.json"))
+    logger.info(f"Phonemes object with corpus stats saved to file: {os.path.join(workspace_path, 'phonemes_with_corpus_stats.json')}")
+
     if open_browser:
-        open_file_in_browser(SAVE_PATH)
+        open_file_in_browser(save_path)
 
 
-@cli.command(help="Generate new lexicons and syllable streams")
+@cli.command(help="Evaluate existing stream.")
+@click.option('--stream', type=str, default="stream.txt", help="Name of text file containing the stream. ARC will look for it in the 'workspace' directory.")
+@click.option('--workspace', type=click.Path(), default=ARC_WORKSPACE, help="Write all results and checkpoints.")
+@click.option('--ssml/--no-ssml', type=bool, default=True, help="Export syllables to SSML.")
+@click.option('--open-browser/--no-open-browser', type=bool, default=True, help="Display results json in default browser.")
+def evaluate_stream(
+    stream: str,
+    workspace: str,
+    ssml: bool,
+    open_browser: bool
+):
+    workspace_path = setup_workspace(workspace, name="arc_eval_stream_out")
+    setup_logging(workspace_path)
+
+    assert os.path.exists(os.path.join(workspace, stream)), f"No file '{stream}' found in workspace directory '{os.path.realpath(workspace)}'."
+
+    with open(os.path.join(workspace, stream), 'r') as file:
+        data = file.read()
+
+    stream = to_stream(data.split("|"), syllable_type="cv")
+
+    save_path = os.path.join(workspace_path, "stream.json")
+    logger.info(f"Read Stream: {stream}")
+    stream.save(save_path)
+    logger.info(f"Stream object saved to file: {save_path}")
+
+    syllables = stream.flatten()
+    syllables.save(os.path.join(workspace_path, "syllables.json"))
+    logger.info(f"Syllables object saved to file: {os.path.join(workspace_path, 'syllables.json')}")
+
+    syllables_with_corpus_stats = syllables.intersection(read_syllables_corpus())
+    syllables_with_corpus_stats.save(os.path.join(workspace_path, "syllables_with_corpus_stats.json"))
+    logger.info(f"Syllables object with corpus stats saved to file: {os.path.join(workspace_path, 'syllables_with_corpus_stats.json')}")
+
+    if ssml:
+        from arc.io import export_speech_synthesizer
+        export_speech_synthesizer(syllables, syllables_dir=os.path.join(workspace_path, "ssml"))
+
+    phonemes = syllables.flatten()
+    phonemes.save(os.path.join(workspace_path, "phonemes.json"))
+    logger.info(f"Phonemes object saved to file: {os.path.join(workspace_path, 'phonemes.json')}")
+
+    corpus_phonemes = read_phoneme_corpus()
+    phonemes_with_corpus_stats = phonemes.intersection(corpus_phonemes)
+    phonemes_with_corpus_stats.save(os.path.join(workspace_path, "phonemes_with_corpus_stats.json"))
+    logger.info(f"Phonemes object with corpus stats saved to file: {os.path.join(workspace_path, 'phonemes_with_corpus_stats.json')}")
+
+
+    if open_browser:
+        open_file_in_browser(save_path)
+
+
+@cli.command(help="Generate new lexicons and syllable streams.")
 @click.option('--workspace', type=click.Path(), default=ARC_WORKSPACE, help="Write all results and checkpoint here.")
 @click.option('--ssml/--no-ssml', type=bool, default=True, help="Export syllables to SSML.")
 @click.option('--open-browser/--no-open-browser', type=bool, default=True, help="Display results json in default browser.")
@@ -126,8 +193,8 @@ def generate(
     syllables.save(os.path.join(workspace_path, "syllables.json"))
 
     if ssml:
-        from arc.io import export_speech_synthesiser
-        export_speech_synthesiser(syllables, syllables_dir=os.path.join(workspace_path, "ssml"))
+        from arc.io import export_speech_synthesizer
+        export_speech_synthesizer(syllables, syllables_dir=os.path.join(workspace_path, "ssml"))
 
     logger.info(f"Generate Words: ...")
     words = make_words(syllables)

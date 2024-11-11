@@ -42,7 +42,7 @@ RESULTS_DEFAULT_PATH = pathlib.Path("arc_results")
 SSML_RESULTS_DEFAULT_PATH = RESULTS_DEFAULT_PATH / "syllables"
 
 
-def export_speech_synthesiser(syllables: Iterable[Syllable],
+def export_speech_synthesizer(syllables: Iterable[Syllable],
                               syllables_dir: Union[str, PathLike] = SSML_RESULTS_DEFAULT_PATH):
     logger.info("SAVE EACH SYLLABLE TO A TEXT FILE FOR THE SPEECH SYNTHESIZER")
     os.makedirs(syllables_dir, exist_ok=True)
