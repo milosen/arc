@@ -165,3 +165,4 @@ titone/
 ssml/
 # we use json only for intermediate data storage
 *.json
+arc_workspace/

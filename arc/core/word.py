@@ -15,6 +15,9 @@ from arc.controls.common import *
 from arc.controls.filter import filter_bigrams, filter_common_phoneme_words, filter_trigrams
 
 
+logger = logging.getLogger(__name__)
+
+
 def check_syll_feature_overlap(syllables):
     all_feats = [feat for syll in syllables for phon_feats in syll.info["phonotactic_features"] for feat in phon_feats]
     return len(all_feats) == len(set(all_feats))
@@ -124,15 +127,15 @@ def make_words(syllables: RegisterType,
     words_register.info["syllables_info"] = copy(syllables.info)
 
     if bigram_control:
-        print("bigram control...")
+        logger.info("bigram control...")
         words_register = filter_bigrams(words_register, p_val=bigram_alpha)
 
     if trigram_control:
-        print("trigram control...")
+        logger.info("trigram control...")
         words_register = filter_trigrams(words_register, p_val=trigram_alpha)
 
     if positional_control:
-        print("positional control...")
+        logger.info("positional control...")
         words_register = filter_common_phoneme_words(words_register, p_threshold=position_alpha, position=positional_control_position)
 
     return words_register

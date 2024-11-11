@@ -25,7 +25,13 @@ setup(
         "pytest",
         "pingouin",
         "matplotlib",
+        "Click",
     ],
     include_package_data=True,
     package_data={'arc': ['data/*', 'data/example_corpus/*']},
+    entry_points={
+        'console_scripts': [
+            'arc = arc.cli:cli',
+        ],
+    },
 )
