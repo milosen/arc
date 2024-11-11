@@ -70,16 +70,18 @@ def cli():
 
 
 @cli.command(help="Evaluate existing lexicons")
-@click.option('--lexicon', type=str, default="lexicon.txt", help="Name of text file containing the lexicon. Arc will look for it in the 'workspace'")
-@click.option('--workspace', type=click.Path(), default=ARC_WORKSPACE, help="Where to write results and checkpoints")
-@click.option('--open-browser/--no-open-browser', type=bool, default=True, help="Open json of the generated lexicon object in browser")
+@click.option('--lexicon', type=str, default="lexicon.txt", help="Name of text file containing the lexicon. ARC will look for it in the 'workspace' directory.")
+@click.option('--workspace', type=click.Path(), default=ARC_WORKSPACE, help="Write all results and checkpoints.")
+@click.option('--open-browser/--no-open-browser', type=bool, default=True, help="Display results json in default browser.")
 def evaluate_lexicon(
     lexicon: str,
     workspace: str,
     open_browser: bool
 ):
-    workspace_path = setup_workspace(workspace, name="arc_eval_lex_out")
+    workspace_path = setup_workspace(workspace, name="arc_eval_lexicon_out")
     setup_logging(workspace_path)
+
+    assert os.path.exists(os.path.join(workspace, lexicon)), f"No file '{lexicon}' found in workspace directory '{os.path.realpath(workspace)}'."
 
     with open(os.path.join(workspace, lexicon), 'r') as file:
         data = file.read()
@@ -104,11 +106,13 @@ def evaluate_lexicon(
 
 
 @cli.command(help="Generate new lexicons and syllable streams")
-@click.option('--workspace', type=click.Path(), default="arc_out", help="Where to write results and checkpoints")
-@click.option('--ssml/--no-ssml', type=bool, default=True, help="Export syllables to SSML")
+@click.option('--workspace', type=click.Path(), default=ARC_WORKSPACE, help="Write all results and checkpoint here.")
+@click.option('--ssml/--no-ssml', type=bool, default=True, help="Export syllables to SSML.")
+@click.option('--open-browser/--no-open-browser', type=bool, default=True, help="Display results json in default browser.")
 def generate(
     workspace: str,
-    ssml: bool
+    ssml: bool,
+    open_browser: bool,
 ):
     workspace_path = setup_workspace(workspace, name="arc_generate_out")
     setup_logging(workspace_path)
@@ -141,4 +145,4 @@ def generate(
     streams.save(os.path.join(workspace_path, f"streams.json"))
 
     logger.info(f"Streams: ")
-    write_out_streams(streams, save_path = workspace_path)
+    write_out_streams(streams, save_path=workspace_path, open_in_browser=open_browser)
