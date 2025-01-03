@@ -42,21 +42,27 @@ def add_phonotactic_features(syllable_phonemes: List[Phoneme]):
     return syll_feats
 
 
-def syllable_from_phonemes(phonemes: RegisterType, phoneme_combination: List[str], syll_feature_labels: List[List[str]]):
-    syll_id = "".join(phoneme_combination)
+def get_feature_labels(phoneme: Phoneme):
+    if phoneme.get_binary_feature('cons'):
+        return LABELS_C
+    return LABELS_V
+
+
+def syllable_from_phonemes(phonemes: RegisterType, phoneme_combination: List[str], syll_feature_labels: List[List[str]] = None):
     syll_phons = []
     syll_features = []
-    for p, phoneme_feature_labels in zip(phoneme_combination, syll_feature_labels):
+    for p in phoneme_combination:
         phoneme: Phoneme = phonemes[p]
         syll_phons.append(phoneme)
-        for label in phoneme_feature_labels:
+        for label in get_feature_labels(phoneme):
             if phoneme.get_binary_feature(label):
                 syll_features.append(1)
             else:
                 syll_features.append(0)
 
     syllable = Syllable(
-        id=syll_id, info={"binary_features": syll_features,
+        id="".join(phoneme_combination), 
+        info={"binary_features": syll_features,
                           "phonotactic_features": add_phonotactic_features(syll_phons)},
         phonemes=syll_phons
     )

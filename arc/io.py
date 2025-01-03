@@ -32,11 +32,16 @@ def get_data_path(fname):
 BINARY_FEATURES_DEFAULT_PATH = get_data_path("phonemes.csv")
 PHONEMES_DEFAULT_PATH = get_data_path("phonemes.json")
 
-CORPUS_DEFAULT_PATH = get_data_path("example_corpus")
-SYLLABLES_DEFAULT_PATH = CORPUS_DEFAULT_PATH / 'syll.txt'
-IPA_BIGRAMS_DEFAULT_PATH = CORPUS_DEFAULT_PATH / 'ipa_bigrams_german.csv'
-IPA_TRIGRAMS_DEFAULT_PATH = CORPUS_DEFAULT_PATH / 'ipa_trigrams_german.csv'
-IPA_SEG_DEFAULT_PATH = CORPUS_DEFAULT_PATH / 'german_IPA_seg.csv'
+CORPUS_DEFAULT_PATH_DEU_SPECIAL = get_data_path("example_corpus")
+SYLLABLES_DEFAULT_PATH_DEU_SPECIAL = CORPUS_DEFAULT_PATH_DEU_SPECIAL / 'syll.txt'
+IPA_BIGRAMS_DEFAULT_PATH = CORPUS_DEFAULT_PATH_DEU_SPECIAL / 'ipa_bigrams_german.csv'
+IPA_TRIGRAMS_DEFAULT_PATH = CORPUS_DEFAULT_PATH_DEU_SPECIAL / 'ipa_trigrams_german.csv'
+IPA_SEG_DEFAULT_PATH = CORPUS_DEFAULT_PATH_DEU_SPECIAL / 'german_IPA_seg.csv'
+
+CORPUS_DEFAULT_PATH_CELEX = get_data_path("CELEX")
+SYLLABLES_DEFAULT_PATH_ENG = CORPUS_DEFAULT_PATH_CELEX / "ENGLISH" / "EFS" / "EFS.CD"
+SYLLABLES_DEFAULT_PATH_DEU = CORPUS_DEFAULT_PATH_CELEX / "GERMAN" / "EFS" / "EFS.CD"
+# SYLLABLES_DEFAULT_PATH_NLD = CORPUS_DEFAULT_PATH_CELEX / "DUTCH" / "EFS" / "EFS.CD"
 
 RESULTS_DEFAULT_PATH = pathlib.Path("arc_results")
 SSML_RESULTS_DEFAULT_PATH = RESULTS_DEFAULT_PATH / "syllables"
@@ -105,7 +110,7 @@ def syll_to_ipa(syll, language="deu", from_format="xsampa"):
 
 
 def read_syllables_corpus(
-        syllables_corpus_path: Union[os.PathLike, str] = SYLLABLES_DEFAULT_PATH,
+        syllables_corpus_path: Union[os.PathLike, str] = SYLLABLES_DEFAULT_PATH_DEU_SPECIAL,
         from_format: Literal["ipa", "xsampa"] = "xsampa",
         lang: str = "deu",
 ) -> Register[str, Syllable]:
