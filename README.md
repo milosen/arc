@@ -1,6 +1,8 @@
 # ARC
 This is code for our work [The ARC Toolbox: Artificial Languages with Rhythmicity Control](https://doi.org/10.1101/2024.05.24.595268)
 
+> ⚠️ This repository is no longer up-to-date. We migrated `arc`'s core functions to a new and more feature-rich toolbox called `alparc`. Please try [ALPARC](https://github.com/milosen/alparc) instead.
+
 ![ARC Flowchart](ARC_Flowchart.png)
 
 ## Setup
